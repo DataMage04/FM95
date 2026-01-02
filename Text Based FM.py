@@ -1,6 +1,7 @@
 from tabulate import tabulate
 import random
 import tqdm
+import math
 
 # #################################################################################### #
 #                           TEAMS
@@ -9,6 +10,13 @@ import tqdm
 class Team:
     def __init__(self, name):
         self.name = name
+
+        # Rating
+        self.attack = 50
+        self.midfield = 50
+        self.defence = 50
+        self.goalkeeping = 50
+        self.record = []
         # Stats
         self.games_played = 0
         self.wins = 0
@@ -21,7 +29,20 @@ class Team:
     @property
     def goal_difference(self):
         return self.goals_for-self.goals_against
-
+    
+    @property
+    def form(self):
+        value = 0
+        for f in self.record[-5:]:
+            if f == 'W':
+                value += 3/5
+            elif f == 'D':
+                value += 1/5
+        return round(value, 2)
+    
+    @property
+    def rating(self):
+        return round(sum([self.attack, self.defence, self.midfield, self.goalkeeping])/4, 1) 
 
 # #################################################################################### #
 #                           INFORMATION
@@ -77,6 +98,7 @@ def new_season():
         team.goals_for = 0
         team.goals_against = 0
         team.points = 0
+        team.record = []
     generate_fixtures(teams)
     gameweek = 1
 
@@ -86,22 +108,26 @@ new_season()
 #                           MATCH ENGINE
 # #################################################################################### #
 
-def simulate_match(home:Team,away:Team):
-    home.score = random.randrange(0,5)
-    away.score = random.randrange(0,5)
+def record_result(home:Team, away:Team):
     if home.score > away.score:
         home.points += 3
         home.wins += 1
         away.losses += 1
+        home.record.append("W")
+        away.record.append("L")
     elif home.score < away.score:
         away.points += 3
         away.wins += 1
         home.losses += 1
+        home.record.append("L")
+        away.record.append("W")
     else:
         home.points += 1
         home.draws += 1
         away.points += 1
         away.draws += 1
+        home.record.append("D")
+        away.record.append("D")
 
     home.games_played += 1
     home.goals_for += home.score
@@ -109,6 +135,33 @@ def simulate_match(home:Team,away:Team):
     away.games_played += 1
     away.goals_for += away.score
     away.goals_against += home.score
+
+def simulate_match(home:Team,away:Team):
+    def poisson(lam):
+        L = math.exp(-lam)
+        k = 0
+        p = 1.0
+
+        while p > L:
+            k += 1
+            p *= random.random()
+
+        return k - 1
+
+    HOME_ADVANTAGE = 4
+    BASE_GOALS = 1.35
+    ATK_DEF_SCALE = 30
+    MID_SCALE = 60
+    home_atk_effect = ((home.attack + HOME_ADVANTAGE + home.form) - (away.defence + away.form))/ATK_DEF_SCALE
+    away_atk_effect = ((away.attack + away.form) - (home.defence + HOME_ADVANTAGE + home.form))/ATK_DEF_SCALE
+    mid_effect = (home.midfield - away.midfield) / MID_SCALE
+    home_xg = BASE_GOALS + home_atk_effect + mid_effect
+    away_xg = BASE_GOALS + away_atk_effect + mid_effect
+    home_xg = max(0.2, min(home_xg, 3.0))
+    away_xg = max(0.2, min(away_xg, 3.0))
+    home.score = poisson(home_xg)
+    away.score = poisson(away_xg)
+    record_result(home, away)
     return home.score, away.score
 
 def simulate_gameweek():
@@ -122,7 +175,7 @@ def simulate_gameweek():
 # #################################################################################### #
 #                           MENU NAVIGATOR
 # #################################################################################### #
-main_menu_options = ["Advance", "Standings", "Fixtures & Results", "Tools", "Quit"]
+main_menu_options = ["Advance", "Standings", "Fixtures & Results", "Teams", "Tools", "Quit"]
 tools_menu_options = ["Reset League","Back"]
 
 def naviagtor():
@@ -133,9 +186,6 @@ def naviagtor():
         for num, option in enumerate(options, 1):
             print(f"{num}. {option}")
 
-    def resolve_selected_menu_choice(option):
-        pass
-
     if len(fixtures) < 1:
         main_menu_options[0] = "End Season"
         print(f"The Season has ended!")
@@ -145,7 +195,10 @@ def naviagtor():
     match stage:
         case "main":
             show_menu_options(options=main_menu_options)
-            choice = main_menu_options[int(input("\nChoose an option: ")) - 1]
+            try:
+                choice = main_menu_options[int(input("\nChoose an option: ")) - 1]
+            except ValueError:
+                choice = main_menu_options[0]
             match choice:
                 case "Advance":
                     simulate_gameweek()
@@ -157,6 +210,7 @@ def naviagtor():
                         log_table.append([rank,team.name,team.games_played,team.wins,team.losses,team.draws,team.goal_difference,team.points])
                     print(f"\n    Log")
                     print(tabulate(log_table, headers=['', "Team","P",'W','L','D','GD','Pts'], tablefmt="simple"),'\n')
+                    input("Press Enter to Continue... ")
                 case "Fixtures & Results": 
                     print("\nFIXTURES\n")
                     for key,value in fixtures.items():
@@ -170,6 +224,13 @@ def naviagtor():
                         for result in value:
                             print(result[0].name+f' {result[1][0]}-{result[1][1]} '+result[2].name)
                         print()
+                    input("Press Enter to Continue... ")
+                case "Teams":
+                    for team in teams:
+                        print(f'\n{team.name.upper()} \nRating: {team.rating}/100 | [Attack:{team.attack} Defence:{team.defence} Midfield:{team.midfield} GoalKeeping:{team.goalkeeping}]')
+                        print(f"Record: {team.record}")
+                        print(f"Form: {team.form}\n")
+                    input("Press Enter to Continue... ")
                 case "Tools":
                     stage = "tools"
                 case "Quit":
@@ -177,7 +238,7 @@ def naviagtor():
                 case "End Season":
                     season += 1
                     new_season()
-                    print("A New Season Awaits!")
+                    print(f"\nSeason {season} has been concluded. A New Season Awaits!")
                     input("Press Enter to Continue... ")
         case 'tools':
             show_menu_options(options=tools_menu_options)
@@ -201,6 +262,17 @@ def main():
     while running:
         if naviagtor():
             break
-        
+
+def test_lab():
+    home = teams[0]
+    away = teams[1]
+    for i in tqdm.tqdm(range(10000)):
+        away.attack = 75
+        simulate_match(home, away)
+    print(f"Win Percentage: {home.name} - {home.wins/100} : {away.wins/100} - {away.name}")
+    print(f"Draw Percentage: {home.name} - {home.draws/100} : {away.draws/100} - {away.name}")
+    print(f"Goals/match: {home.name} - {home.goals_for/10000} : {away.goals_for/10000} - {away.name}")
+
 if __name__ == "__main__":
-    main()
+    # main()
+    test_lab()
