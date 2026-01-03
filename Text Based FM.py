@@ -11,13 +11,13 @@ class Team:
     def __init__(self, name):
         self.name = name
 
-        # Rating
+        # RATINGS
         self.attack = 50
         self.midfield = 50
         self.defence = 50
         self.goalkeeping = 50
         self.record = []
-        # Stats
+        # STATS
         self.games_played = 0
         self.wins = 0
         self.draws = 0
@@ -25,6 +25,8 @@ class Team:
         self.goals_for = 0
         self.goals_against = 0
         self.points = 0
+        # HISTORY
+        self.titles = 0
     
     @property
     def goal_difference(self):
@@ -43,6 +45,76 @@ class Team:
     @property
     def rating(self):
         return round(sum([self.attack, self.defence, self.midfield, self.goalkeeping])/4, 1) 
+    
+# #################################################################################### #
+#                           PLAYERS
+# #################################################################################### #
+
+players = []
+class Player:
+    def __init__(self, name):
+        self.name = name
+
+        
+
+    @property
+    def rating(self):
+        return 
+
+namibian_first_names = [
+    "Johannes", "Ester", "Frans", "Maria", "Helvi", "Kristofina", "Peneyambeko", 
+    "Junias", "Eliaser", "Alfeus", "Nangula", "Twapewa", "Tuhafeni", "Simon", 
+    "Usko", "Suoma", "Saima", "Petrus", "Paulus", "Hafeni", "Ndapewa", "Shikongo", 
+    "Haidula", "Nghidinwa", "Ababuo", "Abam", "Abana", "Abdulbaki", "Abella", 
+    "Abelle", "Abigael", "Adelmiro", "Adelphine", "Adorya", "Afae", "Afiya", 
+    "Aggness", "Aghata", "Agnetta", "Aguinaldo", "Crescence", "Creusa", "Crimilde", 
+    "Crispine", "Cupidon", "Edebe", "Edgarine", "Edilson", "Edivaldo", "Edmilsa", 
+    "Ednah", "Edoghogho", "Behati", "Berhane", "Betje", "Bibi", "Brunelda", 
+    "Cazimira", "Cezanne", "Christien", "Jan", "Juane", "Kayla", "Kerina", 
+    "Kesiah", "Klara", "Jengo", "Johan", "Junior", "Kabili", "Kai", "Kaikara", 
+    "Kaikura", "Kamogelo", "Kian", "Lateef", "Leeto", "Luan", "Luca", "Maghiel", 
+    "Mattys", "Nelius", "Philippus", "Ricus", "Ruan", "Ndahafa", "Sakaria", 
+    "Lineekela", "Mwahalondjila", "Tulonga", "Fillemon", "Hilen", "Tomas", 
+    "Kleopas", "Amalwa", "Ndapandula", "Shapwa", "Mwadhina", "Tuyenikelao", 
+    "Iipumbu", "Ndakondja", "Mbinga", "Shilongo"
+]
+
+namibian_last_names = [
+    "Johannes", "Shikongo", "Paulus", "Petrus", "Andreas", "Namandje", 
+    "Katjavivi", "Haufiku", "Nangolo", "Nyambe", "Shilongo", "Sinimbo", 
+    "Swartbooi", "Venaani", "Haidula", "Nghidinwa", "Hamutenya", "Iihuhua", 
+    "Hamaambo", "Alueendo", "Amungulu", "Huwala", "Mutwa", "Nambundunga", 
+    "Namoloh", "Ndaitwah", "Pinehas", "Shaende", "Geingos", "Hauwanga", 
+    "Indongo", "Gotthardt", "Haushiku", "Iitula", "Nujoma", "Angula", 
+    "Hambuda", "Kugara", "Swart", "Van Wyk", "Nakapunda", "Shifidi", 
+    "Mwahalondjila", "Lineekela", "Tulonga", "Fillemon", "Hilen", "Tomas", 
+    "Kleopas", "Amalwa", "Ndapandula", "Shapwa", "Mwadhina", "Tuyenikelao", 
+    "Iipumbu", "Ndakondja", "Mbinga", "Shilongo", "Nangombe", "Kandjii", 
+    "Mukwiilongo", "Shiweda", "Ndemula", "Hangula", "Shifeta", "Ekandjo", 
+    "Kamati", "Shanghala", "Uushona", "Nambala", "Shooya", "Mupetami", 
+    "Ndjavera", "Kashikola", "Tjivikua", "Munyika", "Shimbuli", "Nankudhu", 
+    "Kandume", "Shigwedha", "Mwetupunga", "Nakalemo", "Shikukutu", "Mbangula", 
+    "Tjiuoro", "Kandongo", "Shivute", "Nghifikwa", "Mukete", "Shaanika", 
+    "Tjitemisa", "Kashuupulwa", "Ndjodhi", "Shikesho", "Mupupa", "Nghilundilua", 
+    "Kakololo", "Shilyomunhu", "Nambahu", "Tjiposa", "Mukongo"
+]
+
+# Function to generate an attribute value using Gaussian distribution
+def generate_attribute(minimum=2, mu=9, sigma=3.2) -> int:
+
+    value = random.gauss(mu=mu, sigma=sigma)  # mean=9, stddev=3.2
+    value = max(minimum, min(20, round(value)))  # clamp to 2–20
+    return value
+
+# Function to generate a player with weighted attributes using Gaussian distribution
+def generate_player(position=None, age=None):
+    # Randomly select a Namibian name
+    first_name = random.choice(namibian_first_names)
+    last_name = random.choice(namibian_last_names)
+
+    players.append(Player(f'{first_name} {last_name}'))
+
+
 
 # #################################################################################### #
 #                           INFORMATION
@@ -102,11 +174,26 @@ def new_season():
     generate_fixtures(teams)
     gameweek = 1
 
+def conclude_season():
+    winner = log_table[0][1]
+    for team in teams:
+        if team.name == winner:
+            team.titles += 1
+            break
+
 new_season()
+
 
 # #################################################################################### #
 #                           MATCH ENGINE
 # #################################################################################### #
+
+def update_table():
+    global log_table, log_order
+    log_order = enumerate(sorted(teams, key=lambda team: (-team.points, -team.goal_difference,team.name)), 1)
+    log_table = []
+    for rank, team in log_order:
+        log_table.append([rank,team.name,team.games_played,team.wins,team.losses,team.draws,team.goal_difference,team.points])
 
 def record_result(home:Team, away:Team):
     if home.score > away.score:
@@ -180,6 +267,7 @@ def simulate_gameweek():
         result = simulate_match(game[0], game[1])
         results['gw'+str(gameweek)].append((game[0], result, game[1]))
     fixtures.pop('gw'+str(gameweek))
+    update_table()
 
 # #################################################################################### #
 #                           MENU NAVIGATOR
@@ -191,6 +279,9 @@ def naviagtor():
     global season, gameweek, stage
     print(f"\nSeason: {season}")
     print(f"Gameweek: {gameweek}\n")
+
+    update_table()
+
     def show_menu_options(options):
         for num, option in enumerate(options, 1):
             print(f"{num}. {option}")
@@ -213,10 +304,6 @@ def naviagtor():
                     simulate_gameweek()
                     gameweek += 1
                 case "Standings":
-                    log_order = enumerate(sorted(teams, key=lambda team: (-team.points, -team.goal_difference,team.name)), 1)
-                    log_table = []
-                    for rank, team in log_order:
-                        log_table.append([rank,team.name,team.games_played,team.wins,team.losses,team.draws,team.goal_difference,team.points])
                     print(f"\n    Log")
                     print(tabulate(log_table, headers=['', "Team","P",'W','L','D','GD','Pts'], tablefmt="simple"),'\n')
                     input("Press Enter to Continue... ")
@@ -238,16 +325,18 @@ def naviagtor():
                     for team in teams:
                         print(f'\n{team.name.upper()} \nRating: {team.rating}/100 | [Attack:{team.attack} Defence:{team.defence} Midfield:{team.midfield} GoalKeeping:{team.goalkeeping}]')
                         print(f"Record: {team.record}")
-                        print(f"Form: {team.form}\n")
+                        print(f"Form: {team.form}")
+                        print(f"Titles: {team.titles}\n")
                     input("Press Enter to Continue... ")
                 case "Tools":
                     stage = "tools"
                 case "Quit":
                     return "quit game"
                 case "End Season":
+                    conclude_season()
                     season += 1
                     new_season()
-                    print(f"\nSeason {season} has been concluded. A New Season Awaits!")
+                    print(f"\nSeason {season-1} has been concluded. A New Season Awaits!")
                     input("Press Enter to Continue... ")
         case 'tools':
             show_menu_options(options=tools_menu_options)
@@ -286,5 +375,5 @@ def test_lab():
     print(f"Goals/match: {home.name} - {home.goals_for/10000} : {away.goals_for/10000} - {away.name}")
 
 if __name__ == "__main__":
-    # main()
-    test_lab()
+    main()
+    # test_lab()
