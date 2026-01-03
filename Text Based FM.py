@@ -147,18 +147,27 @@ def simulate_match(home:Team,away:Team):
             p *= random.random()
 
         return k - 1
+    
+    HOME_ADVANTAGE = 2
+    for team in [home, away]:
+        boost = HOME_ADVANTAGE + team.form if team == home else team.form
+        team.atk = team.attack + boost
+        team.dfc = team.defence + boost
+        team.mid = team.midfield + boost
+        team.gk = team.goalkeeping + boost
 
-    HOME_ADVANTAGE = 4
-    BASE_GOALS = 1.35
-    ATK_DEF_SCALE = 30
-    MID_SCALE = 60
-    home_atk_effect = ((home.attack + HOME_ADVANTAGE + home.form) - (away.defence + away.form))/ATK_DEF_SCALE
-    away_atk_effect = ((away.attack + away.form) - (home.defence + HOME_ADVANTAGE + home.form))/ATK_DEF_SCALE
-    mid_effect = (home.midfield - away.midfield) / MID_SCALE
-    home_xg = BASE_GOALS + home_atk_effect + mid_effect
-    away_xg = BASE_GOALS + away_atk_effect + mid_effect
-    home_xg = max(0.2, min(home_xg, 3.0))
-    away_xg = max(0.2, min(away_xg, 3.0))
+    BASE_CHANCES = 2.35
+    ATK_DEF_SCALE = 40
+    MID_SCALE = 80
+    MID_DEF_SCALE = 200
+    home_atk_effect = 1 + (home.atk - away.dfc)/ATK_DEF_SCALE
+    away_atk_effect = 1 + (away.atk - home.dfc)/ATK_DEF_SCALE
+    mid_diff = (home.mid-away.mid)/MID_SCALE
+    home_xc = BASE_CHANCES * (1 + mid_diff - away.dfc/MID_DEF_SCALE)
+    away_xc = BASE_CHANCES * (1 - mid_diff - home.dfc/MID_DEF_SCALE)
+    home_xg = home_atk_effect * home_xc
+    away_xg = away_atk_effect * away_xc
+
     home.score = poisson(home_xg)
     away.score = poisson(away_xg)
     record_result(home, away)
@@ -264,10 +273,13 @@ def main():
             break
 
 def test_lab():
+    def reset_conditions():
+        for team in [home, away]:
+            team.attack = team.defence = team.goalkeeping = team.midfield = 50
     home = teams[0]
     away = teams[1]
     for i in tqdm.tqdm(range(10000)):
-        away.attack = 75
+        reset_conditions()
         simulate_match(home, away)
     print(f"Win Percentage: {home.name} - {home.wins/100} : {away.wins/100} - {away.name}")
     print(f"Draw Percentage: {home.name} - {home.draws/100} : {away.draws/100} - {away.name}")
