@@ -17,20 +17,28 @@ class Team:
         self.defence = 50
         self.goalkeeping = 50
         self.record = []
+
+        self.players = []
+
         # STATS
-        self.games_played = 0
-        self.wins = 0
-        self.draws = 0
-        self.losses = 0
-        self.goals_for = 0
-        self.goals_against = 0
-        self.points = 0
+        self.stats = {
+            "games_played" : 0,
+            "wins" : 0,
+            'draws' : 0,
+            "losses" : 0,
+            'goals_for' : 0,
+            'goals_against' : 0,
+            'points' : 0,
+        }
         # HISTORY
-        self.titles = 0
+        self.history = {
+            'titles' : 0
+        }
+        
     
     @property
     def goal_difference(self):
-        return self.goals_for-self.goals_against
+        return self.stats['goals_for']-self.stats['goals_against']
     
     @property
     def form(self):
@@ -54,12 +62,22 @@ players = []
 class Player:
     def __init__(self, name):
         self.name = name
+        self.tm = None
+        self.position = None
 
-        
+    # RATINGS
+        self.ratings = {"Attack" : 50,
+        "Midfield" : 50,
+        "Defence" : 50,
+        "Goalkeeping" : 50}
 
     @property
     def rating(self):
-        return 
+        return self.ratings.get("Goalkeeping") if self.position == "GK" else round(sum(list(self.ratings.values())[:3])/3)
+    
+    @property
+    def team(self):
+        return "Free Agent" if self.tm == None else self.tm
 
 namibian_first_names = [
     "Johannes", "Ester", "Frans", "Maria", "Helvi", "Kristofina", "Peneyambeko", 
@@ -100,21 +118,39 @@ namibian_last_names = [
 ]
 
 # Function to generate an attribute value using Gaussian distribution
-def generate_attribute(minimum=2, mu=9, sigma=3.2) -> int:
-
+def generate_attribute(minimum=2, mu=50, sigma=13.2) -> int:
     value = random.gauss(mu=mu, sigma=sigma)  # mean=9, stddev=3.2
-    value = max(minimum, min(20, round(value)))  # clamp to 2–20
+    value = max(minimum, min(100, round(value)))  # clamp to 2–20
     return value
 
 # Function to generate a player with weighted attributes using Gaussian distribution
 def generate_player(position=None, age=None):
+
     # Randomly select a Namibian name
     first_name = random.choice(namibian_first_names)
     last_name = random.choice(namibian_last_names)
 
-    players.append(Player(f'{first_name} {last_name}'))
+    if position == "GK":
+        gk = generate_attribute()
+        dfc = mid = atk = 0
+    else:
+        gk = 0
+        dfc = generate_attribute()
+        mid = generate_attribute() 
+        atk = generate_attribute()
 
+    player = Player(f'{first_name} {last_name}')
+    player.ratings["Attack"] = atk
+    player.ratings["Midfield"] = mid
+    player.ratings["Defence"] = dfc
+    player.ratings["Goalkeeping"] = gk
 
+    # Assign player positions
+    positions = {'Attack':'Att', 'Midfield':'Mid', 'Defence':'Def', 'Goalkeeping':'GK'}
+    best_position = max(player.ratings, key=player.ratings.get)
+    player.position = positions[best_position]
+
+    return player
 
 # #################################################################################### #
 #                           INFORMATION
@@ -163,13 +199,8 @@ def generate_fixtures(teams:list):
 def new_season():
     global gameweek
     for team in teams:
-        team.games_played = 0
-        team.wins = 0
-        team.draws = 0
-        team.losses = 0
-        team.goals_for = 0
-        team.goals_against = 0
-        team.points = 0
+        for stat in team.stats:
+            team.stats[stat] = 0
         team.record = []
     generate_fixtures(teams)
     gameweek = 1
@@ -178,10 +209,22 @@ def conclude_season():
     winner = log_table[0][1]
     for team in teams:
         if team.name == winner:
-            team.titles += 1
+            team.history['titles'] += 1
             break
 
-new_season()
+def set_up():
+    new_season()
+    for i in range(20):
+        position = 'GK' if i < 4 else None
+        player = generate_player(position=position)
+        players.append(player)
+    # for team in teams:
+    #     pass
+
+    
+
+
+set_up()
 
 
 # #################################################################################### #
@@ -190,38 +233,38 @@ new_season()
 
 def update_table():
     global log_table, log_order
-    log_order = enumerate(sorted(teams, key=lambda team: (-team.points, -team.goal_difference,team.name)), 1)
+    log_order = enumerate(sorted(teams, key=lambda team: (-team.stats['points'], -team.goal_difference,team.name)), 1)
     log_table = []
     for rank, team in log_order:
-        log_table.append([rank,team.name,team.games_played,team.wins,team.losses,team.draws,team.goal_difference,team.points])
+        log_table.append([rank,team.name,team.stats['games_played'],team.stats['wins'],team.stats['losses'],team.stats['draws'],team.goal_difference,team.stats['points']])
 
 def record_result(home:Team, away:Team):
     if home.score > away.score:
-        home.points += 3
-        home.wins += 1
-        away.losses += 1
+        home.stats['points'] += 3
+        home.stats['wins'] += 1
+        away.stats['losses'] += 1
         home.record.append("W")
         away.record.append("L")
     elif home.score < away.score:
-        away.points += 3
-        away.wins += 1
-        home.losses += 1
+        away.stats['points'] += 3
+        away.stats['wins'] += 1
+        home.stats['losses'] += 1
         home.record.append("L")
         away.record.append("W")
     else:
-        home.points += 1
-        home.draws += 1
-        away.points += 1
-        away.draws += 1
+        home.stats['points'] += 1
+        home.stats['draws'] += 1
+        away.stats['points'] += 1
+        away.stats['draws'] += 1
         home.record.append("D")
         away.record.append("D")
 
-    home.games_played += 1
-    home.goals_for += home.score
-    home.goals_against += away.score
-    away.games_played += 1
-    away.goals_for += away.score
-    away.goals_against += home.score
+    home.stats['games_played'] += 1
+    home.stats['goals_for'] += home.score
+    home.stats['goals_against'] += away.score
+    away.stats['games_played'] += 1
+    away.stats['goals_for'] += away.score
+    away.stats['goals_against'] += home.score
 
 def simulate_match(home:Team,away:Team):
     def poisson(lam):
@@ -272,11 +315,12 @@ def simulate_gameweek():
 # #################################################################################### #
 #                           MENU NAVIGATOR
 # #################################################################################### #
-main_menu_options = ["Advance", "Standings", "Fixtures & Results", "Teams", "Tools", "Quit"]
+main_menu_options = ["Advance", "Standings", "Fixtures & Results", "Teams", "Players", "Tools", "Quit"]
+players_menu_options = ["Next Page", "Previous Page", "Go To Page","Sort By", "Back"]
 tools_menu_options = ["Reset League","Back"]
 
 def naviagtor():
-    global season, gameweek, stage
+    global season, gameweek, stage, players
     print(f"\nSeason: {season}")
     print(f"Gameweek: {gameweek}\n")
 
@@ -288,7 +332,7 @@ def naviagtor():
 
     if len(fixtures) < 1:
         main_menu_options[0] = "End Season"
-        print(f"The Season has ended!")
+        print(f"The Season Has Ended!")
     else:
         main_menu_options[0] = "Advance"
 
@@ -326,8 +370,14 @@ def naviagtor():
                         print(f'\n{team.name.upper()} \nRating: {team.rating}/100 | [Attack:{team.attack} Defence:{team.defence} Midfield:{team.midfield} GoalKeeping:{team.goalkeeping}]')
                         print(f"Record: {team.record}")
                         print(f"Form: {team.form}")
-                        print(f"Titles: {team.titles}\n")
+                        print(f"Titles: {team.history['titles']}\n")
                     input("Press Enter to Continue... ")
+                case "Players":
+                    global PAGE_SIZE, page, max_page
+                    PAGE_SIZE = 10
+                    page = 0
+                    max_page = (len(players) - 1) // PAGE_SIZE
+                    stage = 'players'
                 case "Tools":
                     stage = "tools"
                 case "Quit":
@@ -338,6 +388,35 @@ def naviagtor():
                     new_season()
                     print(f"\nSeason {season-1} has been concluded. A New Season Awaits!")
                     input("Press Enter to Continue... ")
+            
+        case 'players':
+            start = page * PAGE_SIZE
+            end = start + PAGE_SIZE
+            player_table = []
+            for player in players[start:end]:
+                player_table.append([player.name, player.position, player.team, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
+            print(tabulate(player_table, headers=['Name', 'Pos', 'Team','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
+            print(f"Page {page + 1} of {max_page + 1}\n")
+            show_menu_options(options=players_menu_options)
+            choice = players_menu_options[int(input("\nChoose an option: ")) - 1]
+            match choice:
+                case "Next Page":
+                    page += 1 if page < max_page else 0
+                case "Previous Page":
+                    page -= 1 if page > 0 else 0
+                case "Go To Page":
+                    p = int(input("\nEnter Page Number: "))
+                    if p < max_page and p > 0:
+                        page = p
+                case 'Sort By':
+                    sorters = ['Name', 'Pos', 'Team', "Rtg", "Att", 'Mid', 'Def', 'GK']
+                    show_menu_options(options=sorters)
+                    choice = sorters[int(input("\nChoose an option: ")) - 1]
+                    sort = {'Name':lambda player:player.name, 'Pos':lambda player:player.position, 'Team':lambda player:player.team, 'Rtg':lambda player:-player.rating, "Att":lambda player:-player.ratings["Attack"], 'Mid':lambda player:-player.ratings["Midfield"], 'Def':lambda player:-player.ratings["Defence"], 'GK':lambda player:-player.ratings["Goalkeeping"]}
+                    players = sorted(players, key=sort[choice])
+                case 'Back':
+                    stage = 'main'
+
         case 'tools':
             show_menu_options(options=tools_menu_options)
             choice = tools_menu_options[int(input("\nChoose an option: ")) - 1]
@@ -361,19 +440,6 @@ def main():
         if naviagtor():
             break
 
-def test_lab():
-    def reset_conditions():
-        for team in [home, away]:
-            team.attack = team.defence = team.goalkeeping = team.midfield = 50
-    home = teams[0]
-    away = teams[1]
-    for i in tqdm.tqdm(range(10000)):
-        reset_conditions()
-        simulate_match(home, away)
-    print(f"Win Percentage: {home.name} - {home.wins/100} : {away.wins/100} - {away.name}")
-    print(f"Draw Percentage: {home.name} - {home.draws/100} : {away.draws/100} - {away.name}")
-    print(f"Goals/match: {home.name} - {home.goals_for/10000} : {away.goals_for/10000} - {away.name}")
 
 if __name__ == "__main__":
     main()
-    # test_lab()
