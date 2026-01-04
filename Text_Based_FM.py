@@ -11,13 +11,17 @@ class Team:
     def __init__(self, name):
         self.name = name
 
-        # RATINGS
-        self.attack = 50
-        self.midfield = 50
-        self.defence = 50
-        self.goalkeeping = 50
-        self.record = []
+        # FINANCES
+        self.balance = 0
 
+        # RATINGS
+        self.rtg = {
+            'Attack' : 0,
+            'Midfield' : 0,
+            'Defence' : 0,
+            'Goalkeeping' : 0,
+        }
+        self.record = []
         self.players = []
 
         # STATS
@@ -35,7 +39,24 @@ class Team:
             'titles' : 0
         }
         
-    
+    def calculate_ratings(self):
+        gks = 0
+        totals = {}
+
+        for key in self.rtg.keys():
+            totals[key] = 0
+
+        for player in self.players:
+            gks += 1 if player.position == "GK" else 0
+            for key, value in player.ratings.items():
+                totals[key] += value
+
+        for key in totals:
+            if key == "Goalkeeping":
+                self.rtg[key] = round(totals[key] / gks) if gks > 0 else 0
+            else:
+                self.rtg[key] = round(totals[key] / (len(self.players)-gks)) if (len(players)-gks) > 0 else 0
+
     @property
     def goal_difference(self):
         return self.stats['goals_for']-self.stats['goals_against']
@@ -52,7 +73,13 @@ class Team:
     
     @property
     def rating(self):
-        return round(sum([self.attack, self.defence, self.midfield, self.goalkeeping])/4, 1) 
+        self.calculate_ratings()
+        return round(sum(self.rtg.values()) / len(self.rtg))
+
+    @property
+    def ratings(self):
+        self.calculate_ratings()
+        return self.rtg
     
 # #################################################################################### #
 #                           PLAYERS
@@ -77,7 +104,7 @@ class Player:
     
     @property
     def team(self):
-        return "Free Agent" if self.tm == None else self.tm
+        return "Free Agent" if self.tm == None else self.tm.name
 
 namibian_first_names = [
     "Johannes", "Ester", "Frans", "Maria", "Helvi", "Kristofina", "Peneyambeko", 
@@ -218,11 +245,29 @@ def set_up():
         position = 'GK' if i < 4 else None
         player = generate_player(position=position)
         players.append(player)
-    # for team in teams:
-    #     pass
+    goalkeepers = [player for player in players if player.position == "GK"]
+    outfielders =  [player for player in players if player.position != "GK"]
+    for team in teams:
+        # Assign goalkeeper
+        if not goalkeepers:
+            raise ValueError("Not enough goalkeepers for all teams")
 
-    
+        gk = random.choice(goalkeepers)
+        goalkeepers.remove(gk)
 
+        gk.tm = team
+        team.players.append(gk)
+
+        # Assign 3 outfield players
+        for _ in range(3):
+            if not outfielders:
+                raise ValueError("Not enough outfield players")
+
+            player = random.choice(outfielders)
+            outfielders.remove(player)
+
+            player.tm = team
+            team.players.append(player)
 
 set_up()
 
@@ -281,10 +326,10 @@ def simulate_match(home:Team,away:Team):
     HOME_ADVANTAGE = 2
     for team in [home, away]:
         boost = HOME_ADVANTAGE + team.form if team == home else team.form
-        team.atk = team.attack + boost
-        team.dfc = team.defence + boost
-        team.mid = team.midfield + boost
-        team.gk = team.goalkeeping + boost
+        team.atk = team.rtg['Attack'] + boost
+        team.dfc = team.rtg['Defence'] + boost
+        team.mid = team.rtg['Midfield'] + boost
+        team.gk = team.rtg['Goalkeeping'] + boost
 
     BASE_CHANCES = 2.35
     ATK_DEF_SCALE = 40
@@ -367,7 +412,7 @@ def naviagtor():
                     input("Press Enter to Continue... ")
                 case "Teams":
                     for team in teams:
-                        print(f'\n{team.name.upper()} \nRating: {team.rating}/100 | [Attack:{team.attack} Defence:{team.defence} Midfield:{team.midfield} GoalKeeping:{team.goalkeeping}]')
+                        print(f'\n{team.name.upper()} \nRating: {team.rating}/100 | [Attack:{team.rtg['Attack']} Defence:{team.rtg['Defence']} Midfield:{team.rtg['Midfield']} GoalKeeping:{team.rtg['Goalkeeping']}]')
                         print(f"Record: {team.record}")
                         print(f"Form: {team.form}")
                         print(f"Titles: {team.history['titles']}\n")
@@ -405,8 +450,8 @@ def naviagtor():
                 case "Previous Page":
                     page -= 1 if page > 0 else 0
                 case "Go To Page":
-                    p = int(input("\nEnter Page Number: "))
-                    if p < max_page and p > 0:
+                    p = int(input("\nEnter Page Number: ")) - 1
+                    if p <= max_page:
                         page = p
                 case 'Sort By':
                     sorters = ['Name', 'Pos', 'Team', "Rtg", "Att", 'Mid', 'Def', 'GK']
