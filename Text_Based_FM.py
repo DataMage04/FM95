@@ -13,6 +13,7 @@ class Team:
 
         # FINANCES
         self.balance = 0
+        self.sponsors = []
 
         # RATINGS
         self.rtg = {
@@ -33,6 +34,7 @@ class Team:
             'goals_for' : 0,
             'goals_against' : 0,
             'points' : 0,
+            "clean_sheets":0
         }
         # HISTORY
         self.history = {
@@ -48,8 +50,12 @@ class Team:
 
         for player in self.players:
             gks += 1 if player.position == "GK" else 0
-            for key, value in player.ratings.items():
-                totals[key] += value
+            if player.position == "GK":
+                totals["Goalkeeping"] += player.ratings["Goalkeeping"]
+            else:
+                for key, value in player.ratings.items():
+                    if key != "Goalkeeping":
+                        totals[key] += value
 
         for key in totals:
             if key == "Goalkeeping":
@@ -81,6 +87,13 @@ class Team:
         self.calculate_ratings()
         return self.rtg
     
+    @property
+    def salary_commitments(self):
+        total = 0
+        for player in self.players:
+            total += player.salary
+        return total
+    
 # #################################################################################### #
 #                           PLAYERS
 # #################################################################################### #
@@ -96,7 +109,16 @@ class Player:
         self.ratings = {"Attack" : 50,
         "Midfield" : 50,
         "Defence" : 50,
-        "Goalkeeping" : 50}
+        "Goalkeeping" : 50
+        }
+
+    # STATS
+        self.stats = {
+            "games_played":0,
+            "assists":0,
+            "goals":0,
+            "clean_sheets":0
+        }
 
     @property
     def rating(self):
@@ -105,6 +127,14 @@ class Player:
     @property
     def team(self):
         return "Free Agent" if self.tm == None else self.tm.name
+    
+    @property
+    def salary(self):
+        return 1000 if self.tm != None else  0
+    
+    @property
+    def transfer_value(self):
+        return 6000
 
 namibian_first_names = [
     "Johannes", "Ester", "Frans", "Maria", "Helvi", "Kristofina", "Peneyambeko", 
@@ -235,11 +265,19 @@ def new_season():
 def conclude_season():
     winner = log_table[0][1]
     for team in teams:
+        for sponsor in team.sponsors:
+            team.balance += sponsor['annual_payment']
+            sponsor["length"] -= 1
+            if sponsor['length'] == 0:
+                team.sponsors.remove(sponsor)
+        team.balance -= team.salary_commitments
         if team.name == winner:
             team.history['titles'] += 1
-            break
+
 
 def set_up():
+    global user_team
+    user_team = teams[0]
     new_season()
     for i in range(20):
         position = 'GK' if i < 4 else None
@@ -248,9 +286,11 @@ def set_up():
     goalkeepers = [player for player in players if player.position == "GK"]
     outfielders =  [player for player in players if player.position != "GK"]
     for team in teams:
+        # Assign Sponsors
+        team.sponsors.append({"name": f'{team.name} Limited',"type": 'Main Kit Sponsor',"length": 2, "annual_payment": 2500})
         # Assign goalkeeper
         if not goalkeepers:
-            raise ValueError("Not enough goalkeepers for all teams")
+            generate_player(position="GK")
 
         gk = random.choice(goalkeepers)
         goalkeepers.remove(gk)
@@ -261,7 +301,7 @@ def set_up():
         # Assign 3 outfield players
         for _ in range(3):
             if not outfielders:
-                raise ValueError("Not enough outfield players")
+                generate_player()
 
             player = random.choice(outfielders)
             outfielders.remove(player)
@@ -281,7 +321,7 @@ def update_table():
     log_order = enumerate(sorted(teams, key=lambda team: (-team.stats['points'], -team.goal_difference,team.name)), 1)
     log_table = []
     for rank, team in log_order:
-        log_table.append([rank,team.name,team.stats['games_played'],team.stats['wins'],team.stats['losses'],team.stats['draws'],team.goal_difference,team.stats['points']])
+        log_table.append([rank,team.name,team.stats['games_played'],team.stats['wins'],team.stats['losses'],team.stats['draws'],team.stats['goals_for'],team.stats['goals_against'],team.goal_difference,team.stats['points']])
 
 def record_result(home:Team, away:Team):
     if home.score > away.score:
@@ -303,6 +343,10 @@ def record_result(home:Team, away:Team):
         away.stats['draws'] += 1
         home.record.append("D")
         away.record.append("D")
+    
+    away.stats["clean_sheets"] += 1 if home.score == 0 else 0
+    [player.position for player in away.players]
+    home.stats["clean_sheets"] += 1 if away.score == 0 else 0 
 
     home.stats['games_played'] += 1
     home.stats['goals_for'] += home.score
@@ -312,24 +356,26 @@ def record_result(home:Team, away:Team):
     away.stats['goals_against'] += home.score
 
 def simulate_match(home:Team,away:Team):
-    def poisson(lam):
+    def poisson(lam, gk):
         L = math.exp(-lam)
         k = 0
-        p = 1.0
+        p = 1 - gk/100
 
         while p > L:
             k += 1
             p *= random.random()
 
-        return k - 1
+        return k - 1 if k > 0 else 0
     
     HOME_ADVANTAGE = 2
     for team in [home, away]:
         boost = HOME_ADVANTAGE + team.form if team == home else team.form
-        team.atk = team.rtg['Attack'] + boost
-        team.dfc = team.rtg['Defence'] + boost
-        team.mid = team.rtg['Midfield'] + boost
-        team.gk = team.rtg['Goalkeeping'] + boost
+        team.atk = team.ratings['Attack'] + boost
+        team.dfc = team.ratings['Defence'] + boost
+        team.mid = team.ratings['Midfield'] + boost
+        team.gk = team.ratings['Goalkeeping'] + boost
+        for player in team.players:
+            player.stats["games_played"] += 1
 
     BASE_CHANCES = 2.35
     ATK_DEF_SCALE = 40
@@ -343,8 +389,8 @@ def simulate_match(home:Team,away:Team):
     home_xg = home_atk_effect * home_xc
     away_xg = away_atk_effect * away_xc
 
-    home.score = poisson(home_xg)
-    away.score = poisson(away_xg)
+    home.score = poisson(home_xg, away.gk)
+    away.score = poisson(away_xg, home.gk)
     record_result(home, away)
     return home.score, away.score
 
@@ -354,26 +400,30 @@ def simulate_gameweek():
     for game in games:
         result = simulate_match(game[0], game[1])
         results['gw'+str(gameweek)].append((game[0], result, game[1]))
+        game[0].balance += 10000            # match day revenue for the home team
     fixtures.pop('gw'+str(gameweek))
     update_table()
 
 # #################################################################################### #
 #                           MENU NAVIGATOR
 # #################################################################################### #
-main_menu_options = ["Advance", "Standings", "Fixtures & Results", "Teams", "Players", "Tools", "Quit"]
-players_menu_options = ["Next Page", "Previous Page", "Go To Page","Sort By", "Back"]
-tools_menu_options = ["Reset League","Back"]
+main_menu_options = ["Advance", "Standings", "Fixtures & Results", "Teams", "Squad", "Players", "Tools", "Quit"]
+players_menu_options = ["Next Page", "Previous Page", "Select Player", "Go To Page","Sort By", "Back"]
+tools_menu_options = ["Reset League", "Set User Team", "Back"]
+player_page_options = ["Add To Shortlist","Back"]
 
-def naviagtor():
-    global season, gameweek, stage, players
+def naviagtor(debug=False):
+    global season, gameweek, stage, players, user_team, chosen_player, previous_page
     print(f"\nSeason: {season}")
     print(f"Gameweek: {gameweek}\n")
 
     update_table()
 
     def show_menu_options(options):
+        print()
         for num, option in enumerate(options, 1):
             print(f"{num}. {option}")
+        print()
 
     if len(fixtures) < 1:
         main_menu_options[0] = "End Season"
@@ -384,17 +434,20 @@ def naviagtor():
     match stage:
         case "main":
             show_menu_options(options=main_menu_options)
+            choice = None
             try:
                 choice = main_menu_options[int(input("\nChoose an option: ")) - 1]
             except ValueError:
                 choice = main_menu_options[0]
+            except IndexError:
+                pass
             match choice:
                 case "Advance":
                     simulate_gameweek()
                     gameweek += 1
                 case "Standings":
                     print(f"\n    Log")
-                    print(tabulate(log_table, headers=['', "Team","P",'W','L','D','GD','Pts'], tablefmt="simple"),'\n')
+                    print(tabulate(log_table, headers=['', "Team","P",'W','L','D','GF','GA','GD','Pts'], tablefmt="simple"),'\n')
                     input("Press Enter to Continue... ")
                 case "Fixtures & Results": 
                     print("\nFIXTURES\n")
@@ -412,11 +465,28 @@ def naviagtor():
                     input("Press Enter to Continue... ")
                 case "Teams":
                     for team in teams:
-                        print(f'\n{team.name.upper()} \nRating: {team.rating}/100 | [Attack:{team.rtg['Attack']} Defence:{team.rtg['Defence']} Midfield:{team.rtg['Midfield']} GoalKeeping:{team.rtg['Goalkeeping']}]')
+                        print(f'\n{team.name.upper()}')
+                        print(f"Balance: N$ {team.balance:,} | Salary Commitments: N$ {team.salary_commitments:,} p/a")
+                        print("Sponsors")
+                        if len(team.sponsors) > 0:
+                            for sponsor in team.sponsors:
+                                print(f'{sponsor['type']}: {sponsor["name"]} | N$ {sponsor['annual_payment']:,} for {sponsor['length']} years')
+                        else:
+                            print("None")
+                        print(f'\nRating: {team.rating}/100 | [Attack:{team.rtg['Attack']} Defence:{team.rtg['Defence']} Midfield:{team.rtg['Midfield']} GoalKeeping:{team.rtg['Goalkeeping']}]')
                         print(f"Record: {team.record}")
                         print(f"Form: {team.form}")
                         print(f"Titles: {team.history['titles']}\n")
                     input("Press Enter to Continue... ")
+                case "Squad":
+                    print(user_team.name.upper(), "SQUAD | Rating: ", user_team.rating)
+                    player_table = []
+                    for rank, player in enumerate(user_team.players, 1):
+                        player_table.append([rank, player.name, player.position, player.salary, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
+                    print(tabulate(player_table, headers=['#','Name', 'Pos', 'Salary','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
+                    show_menu_options(options=players_menu_options)
+                    choice = players_menu_options[int(input("\nChoose an option: ")) - 1]
+
                 case "Players":
                     global PAGE_SIZE, page, max_page
                     PAGE_SIZE = 10
@@ -433,14 +503,16 @@ def naviagtor():
                     new_season()
                     print(f"\nSeason {season-1} has been concluded. A New Season Awaits!")
                     input("Press Enter to Continue... ")
+                case _:
+                    pass
             
         case 'players':
             start = page * PAGE_SIZE
             end = start + PAGE_SIZE
             player_table = []
-            for player in players[start:end]:
-                player_table.append([player.name, player.position, player.team, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
-            print(tabulate(player_table, headers=['Name', 'Pos', 'Team','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
+            for rank, player in enumerate(players[start:end], 1):
+                player_table.append([rank, player.name, player.position, player.team, player.salary, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
+            print(tabulate(player_table, headers=['#','Name', 'Pos', 'Team', 'Salary','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
             print(f"Page {page + 1} of {max_page + 1}\n")
             show_menu_options(options=players_menu_options)
             choice = players_menu_options[int(input("\nChoose an option: ")) - 1]
@@ -453,6 +525,10 @@ def naviagtor():
                     p = int(input("\nEnter Page Number: ")) - 1
                     if p <= max_page:
                         page = p
+                case "Select Player":
+                    p = int(input("\nEnter Player #: ")) - 1
+                    chosen_player = players[start + p]
+                    stage = "player page"
                 case 'Sort By':
                     sorters = ['Name', 'Pos', 'Team', "Rtg", "Att", 'Mid', 'Def', 'GK']
                     show_menu_options(options=sorters)
@@ -461,7 +537,17 @@ def naviagtor():
                     players = sorted(players, key=sort[choice])
                 case 'Back':
                     stage = 'main'
-
+        
+        case 'player page':
+            print(f"\n{chosen_player.name.upper()}")
+            print(f'Rating: {chosen_player.rating}/100 | [Attack:{chosen_player.ratings['Attack']} Defence:{chosen_player.ratings['Defence']} Midfield:{chosen_player.ratings['Midfield']} GoalKeeping:{chosen_player.ratings['Goalkeeping']}]/n')
+            show_menu_options(options=player_page_options)
+            choice = player_page_options[int(input("\nChoose an option: ")) - 1]
+            match choice:
+                case "Add To Shortlist":
+                    pass
+                case "Back":
+                    stage = "players"
         case 'tools':
             show_menu_options(options=tools_menu_options)
             choice = tools_menu_options[int(input("\nChoose an option: ")) - 1]
@@ -471,6 +557,31 @@ def naviagtor():
                     print("Successfully Reset League!")
                     input("Press Enter to Continue...")
                     stage = 'main'
+                case "Set User Team":
+                    if user_team:
+                        print(f"Current User Team: {user_team.name.upper()}\n")
+                    else:
+                        print(f"Current User Team: {user_team}\n")
+                    tools_teams_menu_options=["Set User Team To CPU", "Set New User Team", "Cancel"]
+                    show_menu_options(options=tools_teams_menu_options)
+                    choice = tools_teams_menu_options[int(input("\nChoose an option: ")) - 1]
+                    match choice:
+                        case "Set User Team To CPU":
+                            user_team = None
+                            print("User Team Set To None!")
+                            input("Press Enter to Continue...")
+                        case "Set New User Team":
+                            print(f"All CPU teams:\n")
+                            cpu_teams = [team.name for team in teams if team != user_team]
+                            show_menu_options(options=cpu_teams)
+                            choice = cpu_teams[int(input("\nChoose A Team: ")) - 1]
+                            user_team = [team for team in teams if choice == team.name][0]
+                            print("User Team has been set to", user_team.name)
+                            input("Press Enter to Continue...")
+                            # except:
+                            #     print("User Team Was Not Set!")
+                        case "Cancel":
+                            stage = "tools"
                 case "Back":
                     stage = 'main'
 
@@ -479,12 +590,12 @@ def naviagtor():
 #                               MAIN
 # #################################################################################### #
 stage = 'main'
-def main():
+def main(debug=False):
     running = True
     while running:
-        if naviagtor():
+        if naviagtor(debug=debug):
             break
 
 
 if __name__ == "__main__":
-    main()
+    main(debug=True)

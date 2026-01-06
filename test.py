@@ -48,16 +48,22 @@ class TestMath(unittest.TestCase):
         d = n/100
         home = teams[0]
         away = teams[1]
+        for team in [home, away]:
+            for player in team.players:
+                for rtg in player.ratings.keys():
+                    player.ratings[rtg] = 50
+                    player.ratings["Attack"] = 70 if team == away else 50
+        print(home.name,':', home.ratings, ' | ', home.rating)
+        print(away.name,':', away.ratings, ' | ', away.rating)
         for i in range(n):
             simulate_match(home, away)
         print(f"\nSimulated {n} games")
-        print(f"Win Percentage: {home.name} - {home.wins/d} : {away.wins/d} - {away.name}")
-        print(f"Draw Percentage: {home.name} - {home.draws/d} : {away.draws/d} - {away.name}")
-        print(f"Goals/match: {home.name} - {home.goals_for/n} : {away.goals_for/n} - {away.name}")
+        print(f"Win Percentage: {home.name} - {home.stats["wins"]/d} : {away.stats["wins"]/d} - {away.name}")
+        print(f"Draw Percentage: {home.name} - {home.stats["draws"]/d} : {away.stats["draws"]/d} - {away.name}")
+        print(f"Goals/match: {home.name} - {home.stats["goals_for"]/n} : {away.stats["goals_for"]/n} - {away.name}")
     
     def test_generate_players(self):
         player = generate_player()
-        print(player)
         print("\nGenerated Player")
         print("Player Name", 'position', 'rating', 'ratings')
         print(player.name, player.position, player.rating, player.ratings)
