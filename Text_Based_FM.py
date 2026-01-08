@@ -12,7 +12,7 @@ class Team:
         self.name = name
 
         # FINANCES
-        self.balance = 0
+        self.finances = {"balance":0, "revenue":{}, "expenses":{}}
         self.sponsors = []
 
         # RATINGS
@@ -24,6 +24,7 @@ class Team:
         }
         self.record = []
         self.players = []
+        self.shortlist = []
 
         # STATS
         self.stats = {
@@ -40,7 +41,16 @@ class Team:
         self.history = {
             'titles' : 0
         }
-        
+    
+    def record_transaction(self, transaction:tuple, flow:str):
+        match flow:
+            case 'in':
+                self.finances["revenue"][season].append(transaction)
+                self.finances['balance'] += transaction[1]
+            case 'out':
+                self.finances["expenses"][season].append(transaction)
+                self.finances['balance'] -= transaction[1]
+
     def calculate_ratings(self):
         gks = 0
         totals = {}
@@ -102,6 +112,7 @@ players = []
 class Player:
     def __init__(self, name):
         self.name = name
+        self.age = 15
         self.tm = None
         self.position = None
 
@@ -197,6 +208,7 @@ def generate_player(position=None, age=None):
         atk = generate_attribute()
 
     player = Player(f'{first_name} {last_name}')
+    player.age = random.randrange(18, 40)
     player.ratings["Attack"] = atk
     player.ratings["Midfield"] = mid
     player.ratings["Defence"] = dfc
@@ -259,24 +271,25 @@ def new_season():
         for stat in team.stats:
             team.stats[stat] = 0
         team.record = []
+        team.finances['revenue'][season] = []
+        team.finances['expenses'][season] = []
     generate_fixtures(teams)
     gameweek = 1
 
 def conclude_season():
-    winner = log_table[0][1]
+    
     for team in teams:
         for sponsor in team.sponsors:
-            team.balance += sponsor['annual_payment']
+            team.record_transaction((sponsor['type'],sponsor['annual_payment']), 'in')
             sponsor["length"] -= 1
             if sponsor['length'] == 0:
                 team.sponsors.remove(sponsor)
-        team.balance -= team.salary_commitments
-        if team.name == winner:
-            team.history['titles'] += 1
+        team.record_transaction(('Salaries', team.salary_commitments), 'out')
 
 
 def set_up():
-    global user_team
+    global user_team, news
+    news = []
     user_team = teams[0]
     new_season()
     for i in range(20):
@@ -310,6 +323,10 @@ def set_up():
             team.players.append(player)
 
 set_up()
+
+def news_coverage(article:tuple):
+    """Article -> date:gameweek, Topic, News"""
+    news.append(article)
 
 
 # #################################################################################### #
@@ -400,14 +417,14 @@ def simulate_gameweek():
     for game in games:
         result = simulate_match(game[0], game[1])
         results['gw'+str(gameweek)].append((game[0], result, game[1]))
-        game[0].balance += 10000            # match day revenue for the home team
+        game[0].record_transaction(("MatchDay Revenue", 10000),'in')            # match day revenue for the home team
     fixtures.pop('gw'+str(gameweek))
     update_table()
 
 # #################################################################################### #
 #                           MENU NAVIGATOR
 # #################################################################################### #
-main_menu_options = ["Advance", "Standings", "Fixtures & Results", "Teams", "Squad", "Players", "Tools", "Quit"]
+main_menu_options = ["Advance", "News", "Standings", "Fixtures & Results", "Teams", "Squad", "Recruitment", "Academy", "Tools", "Quit"]
 players_menu_options = ["Next Page", "Previous Page", "Select Player", "Go To Page","Sort By", "Back"]
 tools_menu_options = ["Reset League", "Set User Team", "Back"]
 player_page_options = ["Add To Shortlist","Back"]
@@ -427,7 +444,11 @@ def naviagtor(debug=False):
 
     if len(fixtures) < 1:
         main_menu_options[0] = "End Season"
-        print(f"The Season Has Ended!")
+        winner = log_table[0][1]
+        winner = [team for team in teams if team.name == winner][0]
+        winner.history["titles"] += 1
+        print(f"The Season Has Ended. {winner.name} Has Won The Title!")
+        news_coverage((f"Season {season}, Gameweek {gameweek}", f"{winner.name.upper()} WIN THE LEAGUE.", f"After an arduous season, {winner.name} have clinched the title with {winner.stats['points']} points."))
     else:
         main_menu_options[0] = "Advance"
 
@@ -445,6 +466,14 @@ def naviagtor(debug=False):
                 case "Advance":
                     simulate_gameweek()
                     gameweek += 1
+                case "News":
+                    print("\nLATEST NEWS\n")
+                    print(news)
+                    # for new in list(reversed(news)):
+                    #     print(f"{new[0]}: {new[1]}")
+                    #     print(new[2])
+                    #     print()
+                    input("Press Enter to Continue... ")
                 case "Standings":
                     print(f"\n    Log")
                     print(tabulate(log_table, headers=['', "Team","P",'W','L','D','GF','GA','GD','Pts'], tablefmt="simple"),'\n')
@@ -465,14 +494,22 @@ def naviagtor(debug=False):
                     input("Press Enter to Continue... ")
                 case "Teams":
                     for team in teams:
-                        print(f'\n{team.name.upper()}')
-                        print(f"Balance: N$ {team.balance:,} | Salary Commitments: N$ {team.salary_commitments:,} p/a")
+                        print(f'\n{team.name.upper()}\n')
+                        print("FINANCES")
+                        print(f"Balance: N$ {team.finances["balance"]:,} | Salary Commitments: N$ {team.salary_commitments:,} p/a")
                         print("Sponsors")
                         if len(team.sponsors) > 0:
                             for sponsor in team.sponsors:
                                 print(f'{sponsor['type']}: {sponsor["name"]} | N$ {sponsor['annual_payment']:,} for {sponsor['length']} years')
                         else:
                             print("None")
+                        print("\nBALANCE SHEET")
+                        for season in team.finances["revenue"].keys():
+                            print('\nSeason',season)
+                            for income in team.finances["revenue"][season]:
+                                print(f'{income[0]}: N$ {income[1]:,}')
+                            for expense in team.finances["expenses"][season]:
+                                print(f'{expense[0]}: N$ {-expense[1]:,}')
                         print(f'\nRating: {team.rating}/100 | [Attack:{team.rtg['Attack']} Defence:{team.rtg['Defence']} Midfield:{team.rtg['Midfield']} GoalKeeping:{team.rtg['Goalkeeping']}]')
                         print(f"Record: {team.record}")
                         print(f"Form: {team.form}")
@@ -482,17 +519,19 @@ def naviagtor(debug=False):
                     print(user_team.name.upper(), "SQUAD | Rating: ", user_team.rating)
                     player_table = []
                     for rank, player in enumerate(user_team.players, 1):
-                        player_table.append([rank, player.name, player.position, player.salary, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
-                    print(tabulate(player_table, headers=['#','Name', 'Pos', 'Salary','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
+                        player_table.append([rank, player.name, player.age, player.position, player.salary, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
+                    print(tabulate(player_table, headers=['#','Name', 'Age', 'Pos', 'Salary','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
                     show_menu_options(options=players_menu_options)
                     choice = players_menu_options[int(input("\nChoose an option: ")) - 1]
 
-                case "Players":
+                case "Recruitment":
                     global PAGE_SIZE, page, max_page
                     PAGE_SIZE = 10
                     page = 0
                     max_page = (len(players) - 1) // PAGE_SIZE
-                    stage = 'players'
+                    stage = 'recruitment'
+                case "Academy":
+                    pass
                 case "Tools":
                     stage = "tools"
                 case "Quit":
@@ -506,14 +545,18 @@ def naviagtor(debug=False):
                 case _:
                     pass
             
-        case 'players':
+        case 'recruitment':
+            shortlisted_only = False
             start = page * PAGE_SIZE
             end = start + PAGE_SIZE
             player_table = []
-            for rank, player in enumerate(players[start:end], 1):
-                player_table.append([rank, player.name, player.position, player.team, player.salary, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
-            print(tabulate(player_table, headers=['#','Name', 'Pos', 'Team', 'Salary','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
+            temp_players = [player for player in players if player.team != user_team]
+
+            for rank, player in enumerate(temp_players[start:end], 1):
+                player_table.append([rank, player.name, player.age, player.position, player.team, player.salary, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
+            print(tabulate(player_table, headers=['#','Name', 'Age', 'Pos', 'Team', 'Salary','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
             print(f"Page {page + 1} of {max_page + 1}\n")
+            players_menu_options.insert(4, "Shortlisted Only")
             show_menu_options(options=players_menu_options)
             choice = players_menu_options[int(input("\nChoose an option: ")) - 1]
             match choice:
@@ -529,6 +572,10 @@ def naviagtor(debug=False):
                     p = int(input("\nEnter Player #: ")) - 1
                     chosen_player = players[start + p]
                     stage = "player page"
+                case "Shortlisted Only":
+                    shortlisted_only = True
+                case "Transfer History":
+                    pass
                 case 'Sort By':
                     sorters = ['Name', 'Pos', 'Team', "Rtg", "Att", 'Mid', 'Def', 'GK']
                     show_menu_options(options=sorters)
@@ -540,7 +587,7 @@ def naviagtor(debug=False):
         
         case 'player page':
             print(f"\n{chosen_player.name.upper()}")
-            print(f'Rating: {chosen_player.rating}/100 | [Attack:{chosen_player.ratings['Attack']} Defence:{chosen_player.ratings['Defence']} Midfield:{chosen_player.ratings['Midfield']} GoalKeeping:{chosen_player.ratings['Goalkeeping']}]/n')
+            print(f'Rating: {chosen_player.rating}/100 | [Attack:{chosen_player.ratings['Attack']} Defence:{chosen_player.ratings['Defence']} Midfield:{chosen_player.ratings['Midfield']} GoalKeeping:{chosen_player.ratings['Goalkeeping']}]\n')
             show_menu_options(options=player_page_options)
             choice = player_page_options[int(input("\nChoose an option: ")) - 1]
             match choice:
