@@ -2,6 +2,7 @@ from tabulate import tabulate
 import random
 import tqdm
 import math
+from collections import Counter
 
 # #################################################################################### #
 #                           TEAMS
@@ -24,7 +25,7 @@ class Team:
         }
         self.record = []
         self.players = []
-        self.shortlist = []
+        self.academy_players = []
 
         # STATS
         self.stats = {
@@ -115,6 +116,7 @@ class Player:
         self.age = 15
         self.tm = None
         self.position = None
+        self.shortlisted = False
 
     # RATINGS
         self.ratings = {"Attack" : 50,
@@ -130,6 +132,11 @@ class Player:
             "goals":0,
             "clean_sheets":0
         }
+    
+    def develop_player(self):
+        self.age += 1
+        for rtg, value in self.ratings.items():
+            self.ratings[rtg] -= random.randrange(-5,5) if self.ratings[rtg] != 0 else 0
 
     @property
     def rating(self):
@@ -137,11 +144,21 @@ class Player:
     
     @property
     def team(self):
-        return "Free Agent" if self.tm == None else self.tm.name
+        if self.tm == None:
+            return "Free Agent"
+        elif self in self.tm.academy_players:
+            return self.tm.name + ' U18'
+        else:
+            return self.tm.name
     
     @property
     def salary(self):
-        return 1000 if self.tm != None else  0
+        if self.tm == None:
+            return 0
+        elif self in self.tm.academy_players:
+            return 200
+        else:
+            return 1000
     
     @property
     def transfer_value(self):
@@ -197,18 +214,26 @@ def generate_player(position=None, age=None):
     # Randomly select a Namibian name
     first_name = random.choice(namibian_first_names)
     last_name = random.choice(namibian_last_names)
+    player = Player(f'{first_name} {last_name}')
+
+    if age == 'Youth':
+        player.age = random.randrange(15, 17)
+        mu = 30
+        sigma=10
+    else:
+        player.age = random.randrange(18, 40)
+        mu=50
+        sigma=13.2
 
     if position == "GK":
-        gk = generate_attribute()
+        gk = generate_attribute(mu=mu, sigma=sigma)
         dfc = mid = atk = 0
     else:
         gk = 0
-        dfc = generate_attribute()
-        mid = generate_attribute() 
-        atk = generate_attribute()
+        dfc = generate_attribute(mu=mu, sigma=sigma)
+        mid = generate_attribute(mu=mu, sigma=sigma) 
+        atk = generate_attribute(mu=mu, sigma=sigma)
 
-    player = Player(f'{first_name} {last_name}')
-    player.age = random.randrange(18, 40)
     player.ratings["Attack"] = atk
     player.ratings["Midfield"] = mid
     player.ratings["Defence"] = dfc
@@ -277,7 +302,9 @@ def new_season():
     gameweek = 1
 
 def conclude_season():
-    
+    for player in players:
+        player.develop_player()
+
     for team in teams:
         for sponsor in team.sponsors:
             team.record_transaction((sponsor['type'],sponsor['annual_payment']), 'in')
@@ -285,7 +312,6 @@ def conclude_season():
             if sponsor['length'] == 0:
                 team.sponsors.remove(sponsor)
         team.record_transaction(('Salaries', team.salary_commitments), 'out')
-
 
 def set_up():
     global user_team, news
@@ -321,6 +347,13 @@ def set_up():
 
             player.tm = team
             team.players.append(player)
+        
+        for i in range(5):
+            position = 'GK' if i < 1 else None
+            player = generate_player(position=position, age="Youth")
+            players.append(player)
+            team.academy_players.append(player)
+            player.tm = team
 
 set_up()
 
@@ -424,10 +457,9 @@ def simulate_gameweek():
 # #################################################################################### #
 #                           MENU NAVIGATOR
 # #################################################################################### #
-main_menu_options = ["Advance", "News", "Standings", "Fixtures & Results", "Teams", "Squad", "Recruitment", "Academy", "Tools", "Quit"]
+main_menu_options = ["Advance", "Inbox", "News", "Standings", "Fixtures & Results", "Teams", "Squad", "Recruitment", "Academy", "Tools", "Quit"]
 players_menu_options = ["Next Page", "Previous Page", "Select Player", "Go To Page","Sort By", "Back"]
 tools_menu_options = ["Reset League", "Set User Team", "Back"]
-player_page_options = ["Add To Shortlist","Back"]
 
 def naviagtor(debug=False):
     global season, gameweek, stage, players, user_team, chosen_player, previous_page
@@ -516,22 +548,22 @@ def naviagtor(debug=False):
                         print(f"Titles: {team.history['titles']}\n")
                     input("Press Enter to Continue... ")
                 case "Squad":
-                    print(user_team.name.upper(), "SQUAD | Rating: ", user_team.rating)
-                    player_table = []
-                    for rank, player in enumerate(user_team.players, 1):
-                        player_table.append([rank, player.name, player.age, player.position, player.salary, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
-                    print(tabulate(player_table, headers=['#','Name', 'Age', 'Pos', 'Salary','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
-                    show_menu_options(options=players_menu_options)
-                    choice = players_menu_options[int(input("\nChoose an option: ")) - 1]
-
+                    stage = 'squad'
                 case "Recruitment":
-                    global PAGE_SIZE, page, max_page
+                    global PAGE_SIZE, page, max_page, shortlisted_only
                     PAGE_SIZE = 10
                     page = 0
                     max_page = (len(players) - 1) // PAGE_SIZE
+                    shortlisted_only = False
+                    players_menu_options.insert(4, "Shortlisted Only")
                     stage = 'recruitment'
                 case "Academy":
-                    pass
+                    print(user_team.name.upper(), "ACADEMY |")
+                    player_table = []
+                    for rank, player in enumerate(user_team.academy_players, 1):
+                        player_table.append([rank, player.name, player.age, player.position, player.salary, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
+                    print(tabulate(player_table, headers=['#','Name', 'Age', 'Pos', 'Salary','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
+                    input("Press Enter to Continue... ")
                 case "Tools":
                     stage = "tools"
                 case "Quit":
@@ -544,19 +576,49 @@ def naviagtor(debug=False):
                     input("Press Enter to Continue... ")
                 case _:
                     pass
-            
+    
+        case "squad":
+            print(user_team.name.upper(), "SQUAD | Rating: ", user_team.rating)
+            player_table = []
+            for rank, player in enumerate(user_team.players, 1):
+                player_table.append([rank, player.name, player.age, player.position, player.salary, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
+            print(tabulate(player_table, headers=['#','Name', 'Age', 'Pos', 'Salary','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
+            show_menu_options(options=players_menu_options)
+            choice = players_menu_options[int(input("\nChoose an option: ")) - 1]
+
+            match choice:
+                case "Next Page":
+                    page += 1 if page < max_page else 0
+                case "Previous Page":
+                    page -= 1 if page > 0 else 0
+                case "Go To Page":
+                    p = int(input("\nEnter Page Number: ")) - 1
+                    if p <= max_page:
+                        page = p
+                case "Select Player":
+                    p = int(input("\nEnter Player #: ")) - 1
+                    chosen_player = players[start + p]
+                    previous_page = 'squad'
+                    stage = "player page"
+                case 'Sort By':
+                    sorters = ['Name', 'Pos', "Rtg", "Att", 'Mid', 'Def', 'GK']
+                    show_menu_options(options=sorters)
+                    choice = sorters[int(input("\nChoose an option: ")) - 1]
+                    sort = {'Name':lambda player:player.name, 'Pos':lambda player:player.position, 'Rtg':lambda player:-player.rating, "Att":lambda player:-player.ratings["Attack"], 'Mid':lambda player:-player.ratings["Midfield"], 'Def':lambda player:-player.ratings["Defence"], 'GK':lambda player:-player.ratings["Goalkeeping"]}
+                    players = sorted(players, key=sort[choice])
+                case 'Back':
+                    stage = 'main'
         case 'recruitment':
-            shortlisted_only = False
             start = page * PAGE_SIZE
             end = start + PAGE_SIZE
             player_table = []
-            temp_players = [player for player in players if player.team != user_team]
-
+            temp_players = [player for player in players if player.tm != user_team]
+            if shortlisted_only:
+                temp_players = [player for player in temp_players if player.shortlisted == True]
             for rank, player in enumerate(temp_players[start:end], 1):
                 player_table.append([rank, player.name, player.age, player.position, player.team, player.salary, player.rating, player.ratings.get("Attack"), player.ratings.get("Midfield"), player.ratings.get("Defence"), player.ratings.get("Goalkeeping")])
             print(tabulate(player_table, headers=['#','Name', 'Age', 'Pos', 'Team', 'Salary','Rtg', 'Att', 'Mid', 'Def', 'GK'], tablefmt='simple'), '\n')
             print(f"Page {page + 1} of {max_page + 1}\n")
-            players_menu_options.insert(4, "Shortlisted Only")
             show_menu_options(options=players_menu_options)
             choice = players_menu_options[int(input("\nChoose an option: ")) - 1]
             match choice:
@@ -570,10 +632,11 @@ def naviagtor(debug=False):
                         page = p
                 case "Select Player":
                     p = int(input("\nEnter Player #: ")) - 1
-                    chosen_player = players[start + p]
+                    chosen_player = temp_players[start + p]
+                    previous_page = 'recruitment'
                     stage = "player page"
                 case "Shortlisted Only":
-                    shortlisted_only = True
+                    shortlisted_only = True if shortlisted_only == False else False
                 case "Transfer History":
                     pass
                 case 'Sort By':
@@ -588,13 +651,19 @@ def naviagtor(debug=False):
         case 'player page':
             print(f"\n{chosen_player.name.upper()}")
             print(f'Rating: {chosen_player.rating}/100 | [Attack:{chosen_player.ratings['Attack']} Defence:{chosen_player.ratings['Defence']} Midfield:{chosen_player.ratings['Midfield']} GoalKeeping:{chosen_player.ratings['Goalkeeping']}]\n')
+            possible_options = {'recruitment':["Add To Shortlist", "Make An Offer", "Back"], 'squad':[]}
+            player_page_options = possible_options[previous_page]
             show_menu_options(options=player_page_options)
             choice = player_page_options[int(input("\nChoose an option: ")) - 1]
             match choice:
                 case "Add To Shortlist":
+                    chosen_player.shortlisted = True
+                    print(chosen_player.name, 'has been added to you shortlist!')
+                    input("Press Enter to Continue... ")
+                case "Make An Offer":
                     pass
                 case "Back":
-                    stage = "players"
+                    stage = previous_page
         case 'tools':
             show_menu_options(options=tools_menu_options)
             choice = tools_menu_options[int(input("\nChoose an option: ")) - 1]
