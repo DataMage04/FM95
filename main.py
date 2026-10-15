@@ -24,12 +24,15 @@ def main():
         target = f" receiver={event.receiver_id}" if is_pass else ""
         won = f" interceptor={event.interceptor_id}" if event.interceptor_id else ""
         keeper = f" goalkeeper={event.goalkeeper_id}" if event.goalkeeper_id else ""
-        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{target}{won}{keeper}")
+        probability = (f" completion_p={event.completion_probability:.3f}"
+                       if event.completion_probability is not None else "")
+        quality = f" model_xG={event.goal_probability:.3f}" if event.goal_probability is not None else ""
+        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{target}{won}{keeper}{probability}{quality}")
     for team in (match.home, match.away):
         stats = match.statistics(team.id)
         print(f"{team.name}: {stats.passes_completed}/{stats.passes_attempted} passes completed; "
               f"{stats.shots} shots, {stats.shots_on_target} on target, {stats.goals} goals; "
-              f"{stats.possession_percentage:.1f}% possession")
+              f"{stats.possession_percentage:.1f}% possession; model xG={stats.expected_goals:.2f}")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
     print("Equal-player prototype: probabilities are provisional, restarts are instantaneous.")
 

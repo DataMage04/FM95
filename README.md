@@ -55,7 +55,7 @@ teammate. The ball can stay in its current zone or move one neighbouring zone.
 Legal forward destinations have weight 3; same-zone, lateral and backward choices
 have weight 1 each. Teams use their current attacking direction.
 
-Pass completion has a provisional probability of 0.85 for every player and zone.
+Pass completion has a provisional base probability of 0.85, modified by context below.
 Completed passes transfer ownership to the receiver. Every failed pass is currently
 an interception by a randomly selected opposition outfield player at the intended
 destination. There are no loose balls, out-of-play passes or player positions yet.
@@ -76,12 +76,12 @@ lifecycle events and pass totals.
 
 ## Shooting and restarts
 
-On each action, an attacking-third carrier now chooses to shoot with probability
+On each action, an attacking-third carrier chooses to shoot with base probability
 0.12; otherwise they pass. Defensive and middle-third carriers always pass.
-A shot is on target with probability 0.40. An on-target shot becomes a goal with
-probability 0.25, otherwise the goalkeeper holds it. Thus the baseline goal
-probability per shot is 0.40 × 0.25 = 0.10. These are uncalibrated design settings,
-not an empirical xG model. All players and attacking-third lanes use the same values.
+A shot has base on-target probability 0.40 and base conditional goal probability
+0.25, otherwise the goalkeeper holds it. Context modifies these values below.
+With context disabled, goal probability per shot is 0.40 × 0.25 = 0.10.
+These are uncalibrated design settings, not an empirical xG model.
 Set `shot_probability`, `on_target_probability`, and
 `goal_given_on_target_probability` on `ActionConfig` to change them.
 
@@ -100,6 +100,43 @@ The CLI now includes all shots and restarts, with per-team attempts, shots on
 target (goals plus saves), goals and passing totals derived from the event log.
 
 ## Next increments within milestone 1
+
+### Situational probabilities and model xG
+
+Actions now apply provisional multipliers to probability odds. For base probability
+`p`, multiplier `m` and context strength `s`, the effective multiplier is
+`f = 1 + s * (m - 1)` and the adjusted probability is `p*f / (1-p+p*f)`.
+This preserves forced probabilities 0 and 1 and keeps all configured outcomes bounded.
+
+Pass multipliers: forward 0.75, backward 1.20, same zone 1.25, lateral 1.00.
+Passes originating in the attacking third apply an additional factor of 0.85 as
+a coarse pressure proxy. This does not measure defender proximity or actual pass
+distance. Direction is relative to the attacking team and switches at halftime.
+
+Central-lane shot choice uses multiplier 1.25; wide lanes use 0.75. Central shots
+use on-target multiplier 1.20 and conditional-goal multiplier 1.25; wide shots
+use 0.80 and 0.70. Each shot records its adjusted on-target probability and
+unconditional scoring probability before resolution. Every pass records its
+adjusted completion probability. All players remain equally capable.
+
+`TeamStats.expected_goals` sums scoring probabilities across all attempts,
+including saves and misses. The CLI labels this **model xG**: it describes this
+engine's assumptions, not a trained or validated real-world expected-goals model.
+The coarse grid cannot yet represent shot distance, angle or defensive pressure.
+
+Use `ActionConfig(context_strength=0)` to disable context or any value from 0 to 1
+to interpolate its effect. Batch comparison:
+
+```sh
+python -m fm95.batch --matches 200 --seed 95 --context-strength 0
+python -m fm95.batch --matches 200 --seed 95 --context-strength 1
+```
+
+Both runs start matches with identical seeds; changed outcomes can change later
+random draws, so they do not preserve identical action sequences. Contextual
+settings change the seeded results from earlier engine versions.
+
+### Planned work
 
 1. Add richer action context and introduce attributes where actions need them.
 2. Expand restarts and tactics, then calibrate batch simulations.

@@ -61,11 +61,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matches", type=int, default=200)
     parser.add_argument("--seed", type=int, default=95)
+    parser.add_argument("--context-strength", type=float, default=1.0,
+                        help="Situational effects from 0 (neutral) to 1 (default)")
     parser.add_argument("--json", action="store_true", help="Print machine-readable summary")
     args = parser.parse_args()
     if args.matches < 1:
         parser.error("--matches must be positive")
-    summary = run_batch(args.matches, args.seed)
+    if not 0 <= args.context_strength <= 1:
+        parser.error("--context-strength must be between 0 and 1")
+    summary = run_batch(args.matches, args.seed, ActionConfig(context_strength=args.context_strength))
     if args.json:
         print(json.dumps(summary, indent=2))
         return
@@ -73,7 +77,8 @@ def main():
     print(f"Outcomes: {summary['outcomes']}")
     print(f"Mean total goals: {summary['average_total_goals']:.2f}")
     for side, stats in summary["team_averages"].items():
-        print(f"{side}: goals={stats['goals']:.2f}, shots={stats['shots']:.2f}, "
+        print(f"{side}: goals={stats['goals']:.2f}, model xG={stats['expected_goals']:.2f}, "
+              f"shots={stats['shots']:.2f}, "
               f"on target={stats['shots_on_target']:.2f}, "
               f"passes={stats['passes_attempted']:.2f}, "
               f"completion={stats['pass_completion_percentage']:.1f}%, "

@@ -16,6 +16,7 @@ class TeamStats:
     interceptions: int
     possession_seconds: int
     possession_percentage: float
+    expected_goals: float
 
     @property
     def pass_completion_percentage(self) -> float:
@@ -35,4 +36,7 @@ def team_statistics(team_id, opponent_id, events, possession_seconds) -> TeamSta
         shots_on_target=own["goal"] + own["shot_saved"],
         saves=opponent["shot_saved"], interceptions=opponent["pass_intercepted"],
         possession_seconds=held, possession_percentage=100 * held / total if total else 0.0,
+        expected_goals=sum(e.goal_probability for e in events
+                           if e.team_id == team_id and e.kind in ("goal", "shot_saved", "shot_missed")
+                           and e.goal_probability is not None),
     )

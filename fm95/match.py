@@ -50,6 +50,9 @@ class MatchEvent:
     interceptor_id: str | None = None
     origin: Zone | None = None
     goalkeeper_id: str | None = None
+    completion_probability: float | None = None
+    on_target_probability: float | None = None
+    goal_probability: float | None = None
 
 
 @dataclass(frozen=True)
@@ -192,14 +195,18 @@ class Match:
             self.elapsed_seconds, "pass_completed" if result.completed else "pass_intercepted",
             attacking.id, possession.player_id, result.zone, result.receiver_id,
             result.interceptor_id, possession.zone,
+            completion_probability=result.completion_probability,
         ))
 
     def _play_shot(self, possession: Possession, attacking: Team, defending: Team):
-        outcome = resolve_shot(self._rng, self.action_config)
+        result = resolve_shot(possession.zone, self._rng, self.action_config)
+        outcome = result.outcome
         goalkeeper = next(p for p in defending.lineup if p.is_goalkeeper)
         self.events.append(MatchEvent(
             self.elapsed_seconds, outcome, attacking.id, possession.player_id,
             possession.zone, origin=possession.zone, goalkeeper_id=goalkeeper.id,
+            on_target_probability=result.on_target_probability,
+            goal_probability=result.goal_probability,
         ))
         if outcome == "goal":
             if attacking.id == self.home.id:
