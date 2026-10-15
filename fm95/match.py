@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from random import Random
 
-from fm95.actions import ActionConfig, choose_action, resolve_pass, resolve_shot
+from fm95.actions import ActionConfig, choose_action, resolve_pass, resolve_shot, resolve_dribble
 from fm95.pitch import CENTRE, Direction, Zone
 from fm95.statistics import TeamStats, team_statistics
 from fm95.attributes import Attributes
@@ -70,6 +70,10 @@ class MatchEvent:
     passer_passing: float | None = None
     shooter_finishing: float | None = None
     goalkeeper_shot_stopping: float | None = None
+    defender_id: str | None = None
+    dribble_success_probability: float | None = None
+    carrier_dribbling: float | None = None
+    defender_tackling: float | None = None
 
 
 @dataclass(frozen=True)
@@ -203,9 +207,25 @@ class Match:
             raise RuntimeError("An action requires active possession.")
         attacking = self._team(possession.team_id)
         defending = self.away if attacking.id == self.home.id else self.home
-        if choose_action(possession.zone, self.attacking_direction(attacking.id),
-                         self._rng, self.action_config) == "shot":
+        carrier = next(p for p in attacking.lineup if p.id == possession.player_id)
+        action = choose_action(possession.zone, self.attacking_direction(attacking.id),
+                               self._rng, self.action_config, can_dribble=not carrier.is_goalkeeper)
+        if action == "shot":
             self._play_shot(possession, attacking, defending)
+            return
+        if action == "dribble":
+            result = resolve_dribble(possession, attacking, defending,
+                                     self.attacking_direction(attacking.id), self._rng,
+                                     self.action_config)
+            zone = result.destination if result.completed else possession.zone
+            self._possession = (Possession(attacking.id, possession.player_id, zone)
+                                if result.completed else Possession(defending.id, result.defender_id, zone))
+            self.events.append(MatchEvent(
+                self.elapsed_seconds, "dribble_completed" if result.completed else "dribble_tackled",
+                attacking.id, possession.player_id, zone, origin=possession.zone,
+                defender_id=result.defender_id, dribble_success_probability=result.success_probability,
+                carrier_dribbling=carrier.attributes.dribbling, defender_tackling=result.defender_tackling,
+            ))
             return
         result = resolve_pass(possession, attacking, defending,
                               self.attacking_direction(attacking.id), self._rng,

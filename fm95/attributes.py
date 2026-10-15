@@ -9,9 +9,11 @@ class Attributes:
     passing: float = 0.5
     finishing: float = 0.5
     shot_stopping: float = 0.5
+    dribbling: float = 0.5
+    tackling: float = 0.5
 
     def __post_init__(self):
-        for name in ("passing", "finishing", "shot_stopping"):
+        for name in ("passing", "finishing", "shot_stopping", "dribbling", "tackling"):
             value = getattr(self, name)
             if (type(value) not in (int, float) or not isfinite(value)
                     or not 0 <= value <= 1):

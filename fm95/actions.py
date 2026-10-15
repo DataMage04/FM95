@@ -21,13 +21,15 @@ class ActionConfig:
     goal_given_on_target_probability: float = 0.25
     context_strength: float = 1.0
     attribute_strength: float = 1.0
+    dribble_probability: float = 0.15
+    dribble_success_probability: float = 0.60
 
     def __post_init__(self):
         if type(self.interval_seconds) is not int or self.interval_seconds < 1:
             raise ValueError("Action interval must be a positive integer.")
         for name in ("completion_probability", "shot_probability",
                      "on_target_probability", "goal_given_on_target_probability", "context_strength",
-                     "attribute_strength"):
+                     "attribute_strength", "dribble_probability", "dribble_success_probability"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must be between 0 and 1.")
 
@@ -75,7 +77,7 @@ def shot_probabilities(zone: Zone, config: ActionConfig, *, finishing: float = 0
 
 
 def choose_action(zone: Zone, direction: Direction, rng: Random,
-                  config: ActionConfig) -> str:
+                  config: ActionConfig, *, can_dribble: bool = True) -> str:
     """Only attacking-third carriers shoot in this coarse baseline."""
     if zone.third_for(direction) == Third.ATTACKING:
         probability = adjust_probability(config.shot_probability,
@@ -83,7 +85,47 @@ def choose_action(zone: Zone, direction: Direction, rng: Random,
                                          config.context_strength)
         if rng.random() < probability:
             return "shot"
+    # Conditional choice after declining a shot, not an additive probability.
+    if can_dribble and config.dribble_probability > 0 and rng.random() < config.dribble_probability:
+        return "dribble"
     return "pass"
+
+
+def dribble_success_chance(dribbling: float, tackling: float, config: ActionConfig) -> float:
+    return adjust_probability(config.dribble_success_probability,
+        ability_multiplier(dribbling - tackling, config.attribute_strength), 1)
+
+
+@dataclass(frozen=True)
+class DribbleResult:
+    defender_id: str
+    destination: Zone
+    completed: bool
+    success_probability: float
+    defender_tackling: float
+
+
+def resolve_dribble(possession: "Possession", attacking: "Team", defending: "Team",
+                    direction: Direction, rng: Random, config: ActionConfig) -> DribbleResult:
+    """A direct contest: win advances the carrier; loss leaves ball at the challenge zone."""
+    carrier = next(p for p in attacking.lineup if p.id == possession.player_id)
+    defenders = [p for p in defending.lineup if not p.is_goalkeeper]
+    defender = rng.choices(defenders, weights=[
+        involvement_weight(p.position, possession.zone, Direction(-int(direction)))
+        for p in defenders
+    ], k=1)[0]
+    origin = possession.zone
+    column = origin.column + int(direction)
+    if 0 <= column <= 2:
+        destination = Zone(column, origin.lane)
+    else:
+        # At the attacking edge a successful take-on shifts laterally, never off pitch.
+        destination = rng.choice([Zone(origin.column, lane)
+                                  for lane in (origin.lane - 1, origin.lane + 1) if 0 <= lane <= 2])
+    probability = dribble_success_chance(carrier.attributes.dribbling,
+                                         defender.attributes.tackling, config)
+    return DribbleResult(defender.id, destination, rng.random() < probability,
+                         probability, defender.attributes.tackling)
 
 
 @dataclass(frozen=True)

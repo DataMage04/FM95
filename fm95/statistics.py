@@ -17,6 +17,10 @@ class TeamStats:
     possession_seconds: int
     possession_percentage: float
     expected_goals: float
+    dribbles_attempted: int
+    dribbles_completed: int
+    tackles_attempted: int
+    tackles_won: int
 
     @property
     def pass_completion_percentage(self) -> float:
@@ -39,4 +43,8 @@ def team_statistics(team_id, opponent_id, events, possession_seconds) -> TeamSta
         expected_goals=sum(e.goal_probability for e in events
                            if e.team_id == team_id and e.kind in ("goal", "shot_saved", "shot_missed")
                            and e.goal_probability is not None),
+        dribbles_attempted=own["dribble_completed"] + own["dribble_tackled"],
+        dribbles_completed=own["dribble_completed"],
+        tackles_attempted=opponent["dribble_completed"] + opponent["dribble_tackled"],
+        tackles_won=opponent["dribble_tackled"],
     )

@@ -9,10 +9,15 @@ def main():
     match = Match(demo_team("home", "Windhoek FC"), demo_team("away", "Coastal FC"), seed=95)
     run_match(match)
 
-    print("First 10 passes, all shots, restarts and match lifecycle events:")
+    print("First 10 passes/take-ons each, all shots, restarts and match lifecycle events:")
     shown_passes = 0
+    shown_dribbles = 0
     for event in match.events:
         is_pass = event.kind.startswith("pass_")
+        if event.kind.startswith("dribble_"):
+            shown_dribbles += 1
+            if shown_dribbles > 10:
+                continue
         if is_pass:
             shown_passes += 1
             if shown_passes > 10:
@@ -27,12 +32,16 @@ def main():
         probability = (f" completion_p={event.completion_probability:.3f}"
                        if event.completion_probability is not None else "")
         quality = f" model_xG={event.goal_probability:.3f}" if event.goal_probability is not None else ""
-        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{target}{won}{keeper}{probability}{quality}")
+        challenge = (f" defender={event.defender_id}, take_on_p={event.dribble_success_probability:.3f}"
+                     if event.defender_id else "")
+        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{target}{won}{keeper}{probability}{quality}{challenge}")
     for team in (match.home, match.away):
         stats = match.statistics(team.id)
         print(f"{team.name}: {stats.passes_completed}/{stats.passes_attempted} passes completed; "
               f"{stats.shots} shots, {stats.shots_on_target} on target, {stats.goals} goals; "
-              f"{stats.possession_percentage:.1f}% possession; model xG={stats.expected_goals:.2f}")
+              f"{stats.possession_percentage:.1f}% possession; model xG={stats.expected_goals:.2f}; "
+              f"take-ons={stats.dribbles_completed}/{stats.dribbles_attempted}; "
+              f"tackles={stats.tackles_won}/{stats.tackles_attempted}")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
     print("Neutral-attribute demo: values are provisional, restarts are instantaneous.")
 

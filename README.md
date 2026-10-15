@@ -25,7 +25,7 @@ The demo automatically resumes halftime. Added time is deferred.
 
 The prototype now includes passing, interceptions, shots, goals and basic restarts.
 Goalkeeper is a lineup designation. Players now have action-specific passing,
-finishing and shot-stopping attributes; there is no overall rating.
+finishing, shot-stopping, dribbling and tackling attributes; there is no overall rating.
 
 ## Possession foundation
 
@@ -50,8 +50,8 @@ location at the event time.
 ## Autonomous passing baseline
 
 `Match(..., seed=95)` uses a private random generator for reproducible runs.
-Every six simulated seconds, the carrier attempts a pass to another outfield
-teammate. The ball can stay in its current zone or move one neighbouring zone.
+Every six simulated seconds, the carrier chooses an action. When passing, another
+outfield teammate is selected. The ball can stay in its current zone or move one neighbouring zone.
 Legal forward destinations have weight 3; same-zone, lateral and backward choices
 have weight 1 each. Teams use their current attacking direction.
 
@@ -78,7 +78,8 @@ lifecycle events and pass totals.
 ## Shooting and restarts
 
 On each action, an attacking-third carrier chooses to shoot with base probability
-0.12; otherwise they pass. Defensive and middle-third carriers always pass.
+0.12; otherwise they choose between dribbling and passing. Defensive and middle-third
+carriers choose between dribbling and passing without shooting.
 A shot has base on-target probability 0.40 and base conditional goal probability
 0.25, otherwise the goalkeeper holds it. Context modifies these values below.
 With context disabled, goal probability per shot is 0.40 × 0.25 = 0.10.
@@ -139,14 +140,14 @@ settings change the seeded results from earlier engine versions.
 
 ### Planned work
 
-1. Add defensive interactions and tactical roles, then expand tactics and restarts.
+1. Expand defensive interactions, tactical roles, tactics and restarts.
 2. Complete intended match-engine features and verify their behavior.
 3. Calibrate attribute ranges, distributions and probability effects together at the
    end of Milestone 1. Until then, batch runs diagnose behavior rather than tune averages.
 
 ## Provisional player attributes
 
-`Attributes` stores passing, finishing and shot-stopping on a temporary normalized
+`Attributes` stores passing, finishing, shot-stopping, dribbling and tackling on a temporary normalized
 0–1 development scale, with 0.5 neutral. It validates finite numeric values and is
 immutable. This is not a finalized rating range or player-generation distribution.
 
@@ -181,6 +182,38 @@ it is this engine's scoring probability, not a player-independent empirical xG.
 `demo_team(..., attributes=Attributes(...))` supports development scenarios; the
 default demo and batch teams remain neutral. Calibration of values, ranges and
 effect sizes is explicitly deferred until all intended Milestone 1 features exist.
+
+## Dribbling and defensive challenges
+
+After declining a shot (or when outside the attacking third), an outfield carrier
+chooses a take-on with provisional `ActionConfig.dribble_probability=0.15`;
+otherwise they pass. This is a conditional probability, not an added share beside
+shot probability. Goalkeepers distribute through passing rather than taking on
+opponents in this prototype. `dribble_probability=0` disables take-ons.
+
+Each take-on selects one opposition outfield challenger, weighted by proximity
+of their operating zone to the current ball zone. Success probability starts at
+`dribble_success_probability=0.60`; its odds are modified using dribbling minus
+the selected defender's tackling, through the existing provisional ability
+response. Better dribbling improves success; better tackling reduces it. These
+new attributes use the same temporary 0–1 scale, neutral 0.5 and validation rules.
+
+On success, the same carrier moves one zone forward. At the attacking edge,
+success moves one zone laterally instead, staying on the pitch. On failure, the
+defender takes possession at the original challenge zone; the attempted advance
+does not happen. One `dribble_completed` or `dribble_tackled` event records the
+carrier, defender, origin, resulting ball zone, their relevant attributes and
+the success probability. The event's team is the dribbling team in both cases.
+
+Statistics now include dribbles attempted/completed and tackles attempted/won.
+Every take-on is one tackle attempt for the opponent; a lost take-on is one
+opposition tackle won. These are distinct from pass interceptions. CLI examples
+show the first ten take-ons; batch JSON includes all new mean statistics.
+
+Challenges currently happen only as part of selected take-ons. Pressing before
+a pass/shot, fouls, cards, loose balls, physical contests and recovery movement
+remain deferred. Selection, success values and attribute effects are development
+placeholders; no calibration is performed at this stage.
 
 ## Assigned positions and operating zones
 

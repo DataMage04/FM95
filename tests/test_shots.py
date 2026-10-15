@@ -15,13 +15,13 @@ class ShotTests(unittest.TestCase):
                          goal_given_on_target_probability=goal))
 
     def test_shots_require_attacking_third_for_both_directions(self):
-        config = ActionConfig(shot_probability=1)
+        config = ActionConfig(shot_probability=1, dribble_probability=0)
         for direction in (Direction.LEFT, Direction.RIGHT):
             for column in range(3):
                 expected = "shot" if column == (2 if direction == Direction.RIGHT else 0) else "pass"
                 self.assertEqual(choose_action(Zone(column, 1), direction, Random(0), config), expected)
         self.assertEqual(choose_action(Zone(2, 1), Direction.RIGHT, Random(0),
-                                      ActionConfig(shot_probability=0)), "pass")
+                                      ActionConfig(shot_probability=0, dribble_probability=0)), "pass")
 
     def test_goals_credit_correct_team_and_restart_for_conceding_team(self):
         for scorer, carrier, column in (("h", "h-3", 2), ("a", "a-3", 0)):
