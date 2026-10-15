@@ -32,6 +32,9 @@ class TeamStats:
     pressing_fouls: int
     misplaced_passes: int
     recoveries: int
+    shots_blocked: int
+    blocks: int
+    parries: int
 
     @property
     def pass_completion_percentage(self) -> float:
@@ -47,12 +50,12 @@ def team_statistics(team_id, opponent_id, events, possession_seconds) -> TeamSta
         team_id=team_id, goals=own["goal"],
         passes_attempted=own["pass_completed"] + own["pass_intercepted"] + own["pass_loose"],
         passes_completed=own["pass_completed"],
-        shots=own["goal"] + own["shot_saved"] + own["shot_missed"],
-        shots_on_target=own["goal"] + own["shot_saved"],
-        saves=opponent["shot_saved"], interceptions=opponent["pass_intercepted"],
+        shots=own["goal"] + own["shot_saved"] + own["shot_missed"] + own["shot_blocked"] + own["shot_parried"],
+        shots_on_target=own["goal"] + own["shot_saved"] + own["shot_parried"],
+        saves=opponent["shot_saved"] + opponent["shot_parried"], interceptions=opponent["pass_intercepted"],
         possession_seconds=held, possession_percentage=100 * held / total if total else 0.0,
         expected_goals=sum(e.goal_probability for e in events
-                           if e.team_id == team_id and e.kind in ("goal", "shot_saved", "shot_missed")
+                           if e.team_id == team_id and e.kind in ("goal", "shot_saved", "shot_missed", "shot_blocked", "shot_parried")
                            and e.goal_probability is not None),
         dribbles_attempted=own["dribble_completed"] + own["dribble_tackled"] + own["dribble_dispossessed"],
         dribbles_completed=own["dribble_completed"],
@@ -67,4 +70,5 @@ def team_statistics(team_id, opponent_id, events, possession_seconds) -> TeamSta
         presses_attempted=own["press_won"] + own["press_evaded"] + own["press_dispossessed"],
         presses_won=own["press_won"] + own["press_dispossessed"], pressing_fouls=own["press_foul"],
         misplaced_passes=own["pass_loose"], recoveries=own["ball_recovered"],
+        shots_blocked=own["shot_blocked"], blocks=opponent["shot_blocked"], parries=opponent["shot_parried"],
     )

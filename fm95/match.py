@@ -12,6 +12,7 @@ from fm95.actions import press_win_chance
 from fm95.defending import (DefenseConfig, Pressure, defensive_targets,
                             measure_pressure, move_towards)
 from fm95.recovery import LooseBall, RecoveryConfig
+from fm95.shooting import ShotConfig, blocking_context, rebound_location
 from fm95.attributes import ability_multiplier
 from fm95.positions import Position, operating_zone, formation_reference_locations
 
@@ -103,6 +104,8 @@ class MatchEvent:
     opponent_player_id: str | None = None
     challenge_win_probability: float | None = None
     recovery_candidates: int | None = None
+    blocking_player_id: str | None = None
+    block_probability: float = 0
 
 
 @dataclass(frozen=True, init=False)
@@ -157,7 +160,8 @@ class Match:
     def __init__(self, home: Team, away: Team, *, seed: int | None = None,
                  action_config: ActionConfig | None = None, pitch: Pitch | None = None,
                  defense_config: DefenseConfig | None = None,
-                 recovery_config: RecoveryConfig | None = None):
+                 recovery_config: RecoveryConfig | None = None,
+                 shot_config: ShotConfig | None = None):
         if home.id == away.id:
             raise ValueError("A team cannot play itself.")
         if {p.id for p in home.lineup} & {p.id for p in away.lineup}:
@@ -167,6 +171,7 @@ class Match:
         self.pitch = pitch if pitch is not None else Pitch()
         self.defense_config = defense_config if defense_config is not None else DefenseConfig()
         self.recovery_config = recovery_config if recovery_config is not None else RecoveryConfig()
+        self.shot_config = shot_config if shot_config is not None else ShotConfig()
         self.phase = Phase.PRE_MATCH
         self.elapsed_seconds = 0
         self.home_goals = 0
@@ -596,10 +601,14 @@ class Match:
                    pressure: Pressure):
         goalkeeper = next(p for p in defending.lineup if p.is_goalkeeper)
         shooter = next(p for p in attacking.lineup if p.id == possession.player_id)
+        blocker_id, block_chance = blocking_context(defending.lineup, self._player_locations,
+            possession.location, self.attacking_direction(attacking.id), self.pitch, self.shot_config)
         result = resolve_shot(possession.zone, self._rng, self.action_config,
                               finishing=shooter.attributes.finishing,
                               shot_stopping=goalkeeper.attributes.shot_stopping,
-                              pressure=pressure.intensity, pressure_effect=self.defense_config.pressure_effect)
+                              pressure=pressure.intensity, pressure_effect=self.defense_config.pressure_effect,
+                              block_probability=block_chance,
+                              parry_probability=self.shot_config.parry_probability if self.shot_config.enabled else 0)
         outcome = result.outcome
         self.events.append(MatchEvent(
             self.elapsed_seconds, outcome, attacking.id, possession.player_id,
@@ -610,7 +619,16 @@ class Match:
             goalkeeper_shot_stopping=goalkeeper.attributes.shot_stopping,
             location=possession.location, origin_location=possession.location,
             pressure=pressure.intensity, pressing_player_id=pressure.defender_id,
+            blocking_player_id=blocker_id, block_probability=result.block_probability,
         ))
+        if outcome in ("shot_blocked", "shot_parried"):
+            if outcome == "shot_blocked":
+                origin = self._player_locations[blocker_id]
+            else:
+                origin = self._player_locations[goalkeeper.id]
+            location = rebound_location(origin, self.pitch, self._rng, self.shot_config.rebound_distance)
+            self.set_loose_ball(location, reason="blocked_shot" if outcome == "shot_blocked" else "goalkeeper_parry")
+            return
         if outcome == "goal":
             if attacking.id == self.home.id:
                 self.home_goals += 1

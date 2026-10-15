@@ -48,11 +48,12 @@ def main():
         pressure = (f" pressure={event.pressure:.2f} defender={event.pressing_player_id}"
                     if event.pressing_player_id else "")
         opponent = f" opponent={event.opponent_player_id}" if event.opponent_player_id else ""
+        block = f" blocker={event.blocking_player_id} block_p={event.block_probability:.3f}" if event.blocking_player_id else ""
         coordinates = ""
         if event.location is not None:
             x, y = match.pitch.metres(event.location)
             coordinates = f" xy=({x:.1f}, {y:.1f})m"
-        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{coordinates}{target}{won}{keeper}{probability}{quality}{challenge}{foul}{pressure}{opponent}")
+        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{coordinates}{target}{won}{keeper}{probability}{quality}{challenge}{foul}{pressure}{opponent}{block}")
     for team in (match.home, match.away):
         stats = match.statistics(team.id)
         print(f"{team.name}: {stats.passes_completed}/{stats.passes_attempted} passes completed; "
@@ -62,7 +63,8 @@ def main():
               f"tackles={stats.tackles_won}/{stats.tackles_attempted}; fouls={stats.fouls_committed}; "
               f"free kicks taken={stats.free_kicks_taken}; "
               f"cards={stats.yellow_cards}Y/{stats.red_cards}R; "
-              f"presses won={stats.presses_won}/{stats.presses_attempted}; recoveries={stats.recoveries}")
+              f"presses won={stats.presses_won}/{stats.presses_attempted}; recoveries={stats.recoveries}; "
+              f"blocks={stats.blocks}; parries={stats.parries}")
     print(f"Uncontrolled ball time: {match.loose_ball_seconds} s; possession shares use controlled time.")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
     print(f"Match status: {match.phase.value}")

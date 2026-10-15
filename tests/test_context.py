@@ -63,12 +63,12 @@ class ContextTests(unittest.TestCase):
                         pressure=event.pressure, pressure_effect=match.defense_config.pressure_effect))
         for team in ("h", "a"):
             shots = [e for e in match.events if e.team_id == team
-                     and e.kind in ("goal", "shot_saved", "shot_missed")]
+                     and e.kind in ("goal", "shot_saved", "shot_missed", "shot_blocked", "shot_parried")]
             self.assertTrue(shots)
             for event in shots:
                 target, conditional = shot_probabilities(event.zone, match.action_config,
                     pressure=event.pressure, pressure_effect=match.defense_config.pressure_effect)
-                self.assertEqual(event.on_target_probability, target)
-                self.assertEqual(event.goal_probability, target * conditional)
+                self.assertEqual(event.on_target_probability, (1-event.block_probability)*target)
+                self.assertEqual(event.goal_probability, (1-event.block_probability)*target*conditional)
             self.assertAlmostEqual(match.statistics(team).expected_goals,
                                    sum(e.goal_probability for e in shots))

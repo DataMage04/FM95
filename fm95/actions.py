@@ -168,22 +168,29 @@ class ShotResult:
     outcome: str
     on_target_probability: float
     goal_probability: float
+    block_probability: float = 0
 
 
 def resolve_shot(zone: Zone, rng: Random, config: ActionConfig, *, finishing: float = 0.5,
                  shot_stopping: float = 0.5, pressure: float = 0,
-                 pressure_effect: float = .4) -> ShotResult:
-    """On-target attempts become either goals or held saves; no rebounds yet."""
+                 pressure_effect: float = .4, block_probability: float = 0,
+                 parry_probability: float = 0) -> ShotResult:
+    """Resolve obstruction, accuracy, conversion, then held/parried saves."""
     on_target, goal_given_target = shot_probabilities(zone, config, finishing=finishing,
                                                      shot_stopping=shot_stopping, pressure=pressure,
                                                      pressure_effect=pressure_effect)
+    goal_probability = (1-block_probability)*on_target*goal_given_target
+    target_probability = (1-block_probability)*on_target
+    if block_probability > 0 and rng.random() < block_probability:
+        return ShotResult("shot_blocked", target_probability, goal_probability, block_probability)
     if rng.random() >= on_target:
         outcome = "shot_missed"
     elif rng.random() < goal_given_target:
         outcome = "goal"
     else:
-        outcome = "shot_saved"
-    return ShotResult(outcome, on_target, on_target * goal_given_target)
+        outcome = ("shot_parried" if parry_probability > 0 and rng.random() < parry_probability
+                   else "shot_saved")
+    return ShotResult(outcome, target_probability, goal_probability, block_probability)
 
 
 @dataclass(frozen=True)

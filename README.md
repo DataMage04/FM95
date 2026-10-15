@@ -88,7 +88,8 @@ These are uncalibrated design settings, not an empirical xG model.
 Set `shot_probability`, `on_target_probability`, and
 `goal_given_on_target_probability` on `ActionConfig` to change them.
 
-Each attempt emits exactly one outcome: `goal`, `shot_saved` or `shot_missed`.
+Each attempt emits exactly one outcome: `goal`, `shot_saved`, `shot_missed`,
+`shot_blocked` or `shot_parried`.
 The event identifies the shooting team, shooter, shot zone and defending keeper
 via `goalkeeper_id`. A goal increments the score and immediately emits a kickoff
 for the conceding team at centre. A held save gives the keeper possession in the
@@ -97,7 +98,8 @@ event and gives the keeper possession at that same coarse location. The keeper
 can distribute via a pass on the next action.
 
 Shot restarts currently take no simulated time; shot events and resulting restarts
-share a timestamp. Corners, blocks, rebounds, offside, restart delays and added
+share a timestamp. Blocks and parried rebounds now use loose-ball recovery below.
+Corners, offside, restart delays and added
 time are deferred. Whistles still prevent any action at exactly 45 or 90 minutes.
 The CLI now includes all shots and restarts, with per-team attempts, shots on
 target (goals plus saves), goals and passing totals derived from the event log.
@@ -142,7 +144,7 @@ settings change the seeded results from earlier engine versions.
 
 ### Planned work
 
-1. Expand ball outcomes (blocks/rebounds and out-of-play), tactical roles, tactics and restarts.
+1. Add out-of-play outcomes and richer restarts, tactical roles and tactics.
 2. Complete intended match-engine features and verify their behavior.
 3. Calibrate attribute ranges, distributions and probability effects together at the
    end of Milestone 1. Until then, batch runs diagnose behavior rather than tune averages.
@@ -497,13 +499,67 @@ match.set_loose_ball(Location(.55, .4))  # Explicit development scenario.
 ```
 
 `RecoveryConfig(enabled=False)` or batch `--no-loose-balls` disables automatic
-loose outcomes for isolated checks. A manually created loose ball still uses
+pass/tackle loose outcomes for isolated checks. A manually created loose ball still uses
 recovery logic. Explicit possession changes, kickoffs, period whistles and
 abandonment clear loose state. There is no ball velocity, bouncing, out-of-play
-trajectory, shot block/parry/rebound or recovery-specific attribute yet. All
+trajectory or recovery-specific attribute yet. Shot blocks/parries now use the
+same recovery mechanism, as described below. All
 values and attribute ranges remain provisional; calibration is deferred.
 
-## Statistics API and batch usage
+## Shot blocks, parries and rebounds
+
+`ShotConfig` enables additional shot outcomes by default. The resolver checks
+obstruction before accuracy/conversion. Eligible blockers are active outfield
+opponents whose projected location lies strictly between the shooter and the
+centre of the attacked goal, within `block_radius=3` m of that segment. The
+closest eligible player receives block probability
+`block_probability * (1 - perpendicular_distance / block_radius)`, with provisional
+maximum `block_probability=0.35`. Players behind the shooter and keepers are
+excluded. This is a geometric obstruction model, not shot-flight physics.
+
+If the attempt is not blocked, existing accuracy and conversion apply. An
+on-target non-goal attempt is held (`shot_saved`) or parried (`shot_parried`), with
+conditional `parry_probability=0.30`. This does not change the chance of scoring
+the original attempt; it changes whether the save retains control.
+
+A `shot_blocked` creates a loose rebound around the blocking defender's current
+position. A `shot_parried` creates one around the keeper's current position.
+Displacement uses a sampled direction and provisional maximum
+`rebound_distance=8` m. Positive-distance endpoints are clamped inside the field
+until out-of-play deflections are implemented. Zero distance preserves the exact
+contact point. There is no velocity, height, spin or flight delay. A later action
+handles recovery; neither outcome awards immediate control or a goal kick.
+
+Shot events record the candidate `blocking_player_id`, adjusted `block_probability`,
+and keeper identity. A successful block is credited to the opposing defender's
+team. Model xG is now the unconditional scoring probability of the selected shot:
+`(1 - block_probability) * accuracy_after_pressure_and_ability * goal_given_on_target`.
+`on_target_probability` similarly includes the chance of surviving the block.
+These probabilities are recorded before resolving the outcome and included for
+all attempts, including blocked and parried shots. This remains an uncalibrated
+engine probability, not an empirical expected-goals model.
+
+Statistics count all five shot outcomes as attempts. Goals, held saves and parries
+count as on target; blocked shots do not. Both held saves and parries count as
+keeper saves. Separate fields expose attacking `shots_blocked`, defending `blocks`
+and defending `parries`. Thus shots on target reconcile with goals plus opposition
+saves, while attacking blocked shots reconcile with opposition blocks.
+
+```python
+from fm95.shooting import ShotConfig
+
+match = Match(home, away, seed=95, shot_config=ShotConfig())
+```
+
+`ShotConfig(enabled=False)` or batch `--no-shot-interactions` restores held-save/
+miss/goal resolution for isolation. This setting is independent of `RecoveryConfig`:
+disabling pass/tackle loose outcomes does not disable parried/blocked rebounds.
+Batch JSON includes `shot_configuration`; CLI summaries include blocks/parries.
+Dedicated blocking/handling attributes, corners, out-of-play deflections, physical
+trajectories and rebound-specific shot selection remain deferred. No probabilities,
+attribute ranges or effect sizes were calibrated.
+
+## Statistics API and batch commands
 
 `match.statistics(team_id)` returns a fresh immutable `TeamStats` snapshot before,
 during or after a match. It provides goals, attempted/completed passes, shots,

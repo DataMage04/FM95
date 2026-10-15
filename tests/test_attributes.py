@@ -83,8 +83,8 @@ class AttributeTests(unittest.TestCase):
                                                finishing=.9, shot_stopping=.8,
                                                pressure=shot.pressure,
                                                pressure_effect=match.defense_config.pressure_effect)
-        self.assertEqual(shot.on_target_probability, target)
-        self.assertEqual(shot.goal_probability, target * conditional)
+        self.assertEqual(shot.on_target_probability, (1-shot.block_probability)*target)
+        self.assertEqual(shot.goal_probability, (1-shot.block_probability)*target*conditional)
 
     def test_non_neutral_match_is_reproducible_and_reconciles(self):
         matches = [run_match(Match(
