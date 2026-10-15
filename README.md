@@ -24,8 +24,8 @@ second, independent of real time. At 45 minutes the engine pauses;
 The demo automatically resumes halftime. Added time is deferred.
 
 The prototype now includes passing, interceptions, shots, goals and basic restarts.
-Goalkeeper is a lineup designation; there are deliberately no overall ratings or
-performance attributes yet.
+Goalkeeper is a lineup designation. Players now have action-specific passing,
+finishing and shot-stopping attributes; there is no overall rating.
 
 ## Possession foundation
 
@@ -60,7 +60,7 @@ Completed passes transfer ownership to the receiver. Every failed pass is curren
 an interception by a randomly selected opposition outfield player at the intended
 destination. There are no loose balls, out-of-play passes or player positions yet.
 These simplifications establish state transitions; they are not calibrated football
-statistics. Players are equally capable and goalkeepers are excluded as receivers
+statistics. Demo players have neutral attributes and goalkeepers are excluded as receivers
 and interceptors in this baseline.
 
 `ActionConfig(interval_seconds=6, completion_probability=0.85)` can be supplied
@@ -117,7 +117,7 @@ Central-lane shot choice uses multiplier 1.25; wide lanes use 0.75. Central shot
 use on-target multiplier 1.20 and conditional-goal multiplier 1.25; wide shots
 use 0.80 and 0.70. Each shot records its adjusted on-target probability and
 unconditional scoring probability before resolution. Every pass records its
-adjusted completion probability. All players remain equally capable.
+adjusted completion probability. Player attribute effects are applied next as described below.
 
 `TeamStats.expected_goals` sums scoring probabilities across all attempts,
 including saves and misses. The CLI labels this **model xG**: it describes this
@@ -138,8 +138,48 @@ settings change the seeded results from earlier engine versions.
 
 ### Planned work
 
-1. Add richer action context and introduce attributes where actions need them.
-2. Expand restarts and tactics, then calibrate batch simulations.
+1. Add player roles and defensive interactions, then expand tactics and restarts.
+2. Complete intended match-engine features and verify their behavior.
+3. Calibrate attribute ranges, distributions and probability effects together at the
+   end of Milestone 1. Until then, batch runs diagnose behavior rather than tune averages.
+
+## Provisional player attributes
+
+`Attributes` stores passing, finishing and shot-stopping on a temporary normalized
+0–1 development scale, with 0.5 neutral. It validates finite numeric values and is
+immutable. This is not a finalized rating range or player-generation distribution.
+
+```python
+from fm95.attributes import Attributes
+from fm95.match import Player
+
+player = Player("p-1", "Example Player",
+                attributes=Attributes(passing=0.7, finishing=0.6))
+keeper = Player("gk-1", "Example Keeper", is_goalkeeper=True,
+                attributes=Attributes(passing=0.4, shot_stopping=0.8))
+```
+
+Each action uses the involved player's attributes, never a team average:
+
+- Passing scales the passer's contextual completion odds relative to neutral 0.5.
+  This also applies when the goalkeeper distributes after a save or goal kick.
+- Finishing scales shot on-target odds relative to neutral 0.5.
+- Finishing versus the defending keeper's shot-stopping scales conditional scoring
+  odds. A stronger keeper affects conversion, not shot accuracy or shot selection.
+
+The temporary odds multiplier is `exp(2 * attribute_strength * advantage)`.
+Passing/accuracy advantage is attribute minus 0.5; conditional scoring advantage
+is finishing minus shot-stopping. `ActionConfig(attribute_strength=0)` disables
+these effects. Neutral attributes reproduce the prior contextual probabilities.
+Forced base probabilities 0 and 1 remain forced even at attribute extremes.
+Shot selection remains contextual only; decision-making attributes are deferred.
+
+Events record the passer's passing value or the shooter/keeper values alongside
+the resolved probabilities. Model xG currently includes these ability effects;
+it is this engine's scoring probability, not a player-independent empirical xG.
+`demo_team(..., attributes=Attributes(...))` supports development scenarios; the
+default demo and batch teams remain neutral. Calibration of values, ranges and
+effect sizes is explicitly deferred until all intended Milestone 1 features exist.
 
 ## Match statistics and batch diagnostics
 

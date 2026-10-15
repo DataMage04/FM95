@@ -1,12 +1,13 @@
 """Match lifecycle and application of resolved football actions."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from random import Random
 
 from fm95.actions import ActionConfig, choose_action, resolve_pass, resolve_shot
 from fm95.pitch import CENTRE, Direction, Zone
 from fm95.statistics import TeamStats, team_statistics
+from fm95.attributes import Attributes
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,11 @@ class Player:
     id: str
     name: str
     is_goalkeeper: bool = False
+    attributes: Attributes = field(default_factory=Attributes)
+
+    def __post_init__(self):
+        if not isinstance(self.attributes, Attributes):
+            raise ValueError("Player attributes must be an Attributes instance.")
 
 
 @dataclass(frozen=True)
@@ -53,6 +59,9 @@ class MatchEvent:
     completion_probability: float | None = None
     on_target_probability: float | None = None
     goal_probability: float | None = None
+    passer_passing: float | None = None
+    shooter_finishing: float | None = None
+    goalkeeper_shot_stopping: float | None = None
 
 
 @dataclass(frozen=True)
@@ -196,17 +205,24 @@ class Match:
             attacking.id, possession.player_id, result.zone, result.receiver_id,
             result.interceptor_id, possession.zone,
             completion_probability=result.completion_probability,
+            passer_passing=next(p.attributes.passing for p in attacking.lineup
+                                if p.id == possession.player_id),
         ))
 
     def _play_shot(self, possession: Possession, attacking: Team, defending: Team):
-        result = resolve_shot(possession.zone, self._rng, self.action_config)
-        outcome = result.outcome
         goalkeeper = next(p for p in defending.lineup if p.is_goalkeeper)
+        shooter = next(p for p in attacking.lineup if p.id == possession.player_id)
+        result = resolve_shot(possession.zone, self._rng, self.action_config,
+                              finishing=shooter.attributes.finishing,
+                              shot_stopping=goalkeeper.attributes.shot_stopping)
+        outcome = result.outcome
         self.events.append(MatchEvent(
             self.elapsed_seconds, outcome, attacking.id, possession.player_id,
             possession.zone, origin=possession.zone, goalkeeper_id=goalkeeper.id,
             on_target_probability=result.on_target_probability,
             goal_probability=result.goal_probability,
+            shooter_finishing=shooter.attributes.finishing,
+            goalkeeper_shot_stopping=goalkeeper.attributes.shot_stopping,
         ))
         if outcome == "goal":
             if attacking.id == self.home.id:

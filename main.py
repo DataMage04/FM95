@@ -34,7 +34,7 @@ def main():
               f"{stats.shots} shots, {stats.shots_on_target} on target, {stats.goals} goals; "
               f"{stats.possession_percentage:.1f}% possession; model xG={stats.expected_goals:.2f}")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
-    print("Equal-player prototype: probabilities are provisional, restarts are instantaneous.")
+    print("Neutral-attribute demo: values are provisional, restarts are instantaneous.")
 
 
 if __name__ == "__main__":

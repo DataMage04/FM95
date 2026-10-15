@@ -1,10 +1,11 @@
-"""Equal-player actions with coarse situational context; uncalibrated values."""
+"""Contextual actions and provisional player effects; uncalibrated values."""
 
 from dataclasses import dataclass
 from random import Random
 from typing import TYPE_CHECKING
 
 from fm95.pitch import Direction, Third, Zone
+from fm95.attributes import ability_multiplier
 
 if TYPE_CHECKING:
     from fm95.match import Possession, Team
@@ -18,12 +19,14 @@ class ActionConfig:
     on_target_probability: float = 0.40
     goal_given_on_target_probability: float = 0.25
     context_strength: float = 1.0
+    attribute_strength: float = 1.0
 
     def __post_init__(self):
         if type(self.interval_seconds) is not int or self.interval_seconds < 1:
             raise ValueError("Action interval must be a positive integer.")
         for name in ("completion_probability", "shot_probability",
-                     "on_target_probability", "goal_given_on_target_probability", "context_strength"):
+                     "on_target_probability", "goal_given_on_target_probability", "context_strength",
+                     "attribute_strength"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must be between 0 and 1.")
 
@@ -38,7 +41,7 @@ def adjust_probability(base: float, multiplier: float, strength: float) -> float
 
 
 def pass_completion_chance(origin: Zone, destination: Zone, direction: Direction,
-                           config: ActionConfig) -> float:
+                           config: ActionConfig, *, passing: float = 0.5) -> float:
     progress = (destination.column - origin.column) * int(direction)
     if progress > 0:
         multiplier = 0.75
@@ -51,16 +54,22 @@ def pass_completion_chance(origin: Zone, destination: Zone, direction: Direction
     # A coarse pressure proxy, not a calculation from defender positions.
     if origin.third_for(direction) == Third.ATTACKING:
         multiplier *= 0.85
-    return adjust_probability(config.completion_probability, multiplier, config.context_strength)
+    contextual = adjust_probability(config.completion_probability, multiplier, config.context_strength)
+    return adjust_probability(contextual, ability_multiplier(passing - 0.5, config.attribute_strength), 1)
 
 
-def shot_probabilities(zone: Zone, config: ActionConfig) -> tuple[float, float]:
+def shot_probabilities(zone: Zone, config: ActionConfig, *, finishing: float = 0.5,
+                       shot_stopping: float = 0.5) -> tuple[float, float]:
     """Return on-target and conditional scoring probabilities before any draws."""
     central = zone.lane == 1
     on_target = adjust_probability(config.on_target_probability,
                                    1.20 if central else 0.80, config.context_strength)
     goal_given_target = adjust_probability(config.goal_given_on_target_probability,
                                            1.25 if central else 0.70, config.context_strength)
+    on_target = adjust_probability(on_target,
+        ability_multiplier(finishing - 0.5, config.attribute_strength), 1)
+    goal_given_target = adjust_probability(goal_given_target,
+        ability_multiplier(finishing - shot_stopping, config.attribute_strength), 1)
     return on_target, goal_given_target
 
 
@@ -83,9 +92,11 @@ class ShotResult:
     goal_probability: float
 
 
-def resolve_shot(zone: Zone, rng: Random, config: ActionConfig) -> ShotResult:
+def resolve_shot(zone: Zone, rng: Random, config: ActionConfig, *, finishing: float = 0.5,
+                 shot_stopping: float = 0.5) -> ShotResult:
     """On-target attempts become either goals or held saves; no rebounds yet."""
-    on_target, goal_given_target = shot_probabilities(zone, config)
+    on_target, goal_given_target = shot_probabilities(zone, config, finishing=finishing,
+                                                     shot_stopping=shot_stopping)
     if rng.random() >= on_target:
         outcome = "shot_missed"
     elif rng.random() < goal_given_target:
@@ -124,7 +135,9 @@ def resolve_pass(possession: "Possession", attacking: "Team", defending: "Team",
             destinations.append(Zone(column, lane))
             weights.append(3 if dx == int(direction) else 1)
     destination = rng.choices(destinations, weights=weights, k=1)[0]
-    probability = pass_completion_chance(origin, destination, direction, config)
+    passer = next(p for p in attacking.lineup if p.id == possession.player_id)
+    probability = pass_completion_chance(origin, destination, direction, config,
+                                         passing=passer.attributes.passing)
     completed = rng.random() < probability
     interceptor = None if completed else rng.choice(
         [p for p in defending.lineup if not p.is_goalkeeper]
