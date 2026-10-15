@@ -23,13 +23,15 @@ class ActionConfig:
     attribute_strength: float = 1.0
     dribble_probability: float = 0.15
     dribble_success_probability: float = 0.60
+    foul_probability: float = 0.08
 
     def __post_init__(self):
         if type(self.interval_seconds) is not int or self.interval_seconds < 1:
             raise ValueError("Action interval must be a positive integer.")
         for name in ("completion_probability", "shot_probability",
                      "on_target_probability", "goal_given_on_target_probability", "context_strength",
-                     "attribute_strength", "dribble_probability", "dribble_success_probability"):
+                     "attribute_strength", "dribble_probability", "dribble_success_probability",
+                     "foul_probability"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must be between 0 and 1.")
 
@@ -103,6 +105,7 @@ class DribbleResult:
     completed: bool
     success_probability: float
     defender_tackling: float
+    fouled: bool = False
 
 
 def resolve_dribble(possession: "Possession", attacking: "Team", defending: "Team",
@@ -124,6 +127,9 @@ def resolve_dribble(possession: "Possession", attacking: "Team", defending: "Tea
                                   for lane in (origin.lane - 1, origin.lane + 1) if 0 <= lane <= 2])
     probability = dribble_success_chance(carrier.attributes.dribbling,
                                          defender.attributes.tackling, config)
+    if config.foul_probability > 0 and rng.random() < config.foul_probability:
+        return DribbleResult(defender.id, origin, False, probability,
+                             defender.attributes.tackling, fouled=True)
     return DribbleResult(defender.id, destination, rng.random() < probability,
                          probability, defender.attributes.tackling)
 

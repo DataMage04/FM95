@@ -95,7 +95,7 @@ centre lane of their defensive column. A miss emits an immediate `goal_kick`
 event and gives the keeper possession at that same coarse location. The keeper
 can distribute via a pass on the next action.
 
-Restarts currently take no simulated time; shot events and resulting restarts
+Shot restarts currently take no simulated time; shot events and resulting restarts
 share a timestamp. Corners, blocks, rebounds, offside, restart delays and added
 time are deferred. Whistles still prevent any action at exactly 45 or 90 minutes.
 The CLI now includes all shots and restarts, with per-team attempts, shots on
@@ -206,14 +206,47 @@ carrier, defender, origin, resulting ball zone, their relevant attributes and
 the success probability. The event's team is the dribbling team in both cases.
 
 Statistics now include dribbles attempted/completed and tackles attempted/won.
-Every take-on is one tackle attempt for the opponent; a lost take-on is one
+Every clean take-on is one tackle attempt for the opponent; a lost clean take-on is one
 opposition tackle won. These are distinct from pass interceptions. CLI examples
 show the first ten take-ons; batch JSON includes all new mean statistics.
 
 Challenges currently happen only as part of selected take-ons. Pressing before
-a pass/shot, fouls, cards, loose balls, physical contests and recovery movement
+a pass/shot, cards, loose balls, physical contests and recovery movement
 remain deferred. Selection, success values and attribute effects are development
 placeholders; no calibration is performed at this stage.
+
+## Fouls and free-kick restarts
+
+Take-on challenges now check provisional `ActionConfig.foul_probability=0.08`
+before resolving clean success/failure. This is currently independent of player
+attributes. Set it to 0 to disable fouls or 1 to force them in behavioral tests.
+A foul interrupts the take-on: no advancement or possession transfer occurs.
+The `foul` event belongs to the defending team and identifies its offending player,
+the `fouled_player_id`, ball zone and configured foul probability. A following
+`free_kick_awarded` event belongs to the fouled team.
+
+`match.pending_restart` exposes an immutable restart record: kind, team, taker
+and zone. The fouled carrier takes the restart at the original challenge location.
+At the next scheduled action the engine emits `free_kick_taken` and resolves a
+short pass through the normal passing model. It cannot dribble or shoot from
+that pending restart. The pass may succeed or be intercepted normally; the
+restart is consumed once. Explicit development `set_possession` overrides clear
+pending restarts. Kickoffs and period-ending whistles also clear them.
+
+Foul-interrupted challenges are excluded from completed clean take-on/tackle
+attempt counts. Separate stats record fouls committed/suffered and free kicks
+awarded/taken. Committed fouls reconcile with opposition fouls suffered; awards
+match fouls suffered. Taken counts may be lower when a period ends before the
+scheduled restart. The current fixed whistle does not extend play for a pending
+free kick; added-time handling remains unfinished.
+
+Possession is credited to the awarded team while awaiting that next action,
+under the existing coarse possession-time convention. There is no separate
+dead-ball clock yet. All fouls currently award the same prototype free kick:
+penalty-area geometry/penalties, direct free-kick shots, advantage, cards, severity
+and discipline attributes are deferred. This is an incremental game model rather
+than a complete implementation of football rules. Calibration remains deferred
+until all intended Milestone 1 features are in place.
 
 ## Assigned positions and operating zones
 

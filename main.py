@@ -34,16 +34,18 @@ def main():
         quality = f" model_xG={event.goal_probability:.3f}" if event.goal_probability is not None else ""
         challenge = (f" defender={event.defender_id}, take_on_p={event.dribble_success_probability:.3f}"
                      if event.defender_id else "")
-        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{target}{won}{keeper}{probability}{quality}{challenge}")
+        foul = f" fouled_player={event.fouled_player_id}" if event.fouled_player_id else ""
+        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{target}{won}{keeper}{probability}{quality}{challenge}{foul}")
     for team in (match.home, match.away):
         stats = match.statistics(team.id)
         print(f"{team.name}: {stats.passes_completed}/{stats.passes_attempted} passes completed; "
               f"{stats.shots} shots, {stats.shots_on_target} on target, {stats.goals} goals; "
               f"{stats.possession_percentage:.1f}% possession; model xG={stats.expected_goals:.2f}; "
               f"take-ons={stats.dribbles_completed}/{stats.dribbles_attempted}; "
-              f"tackles={stats.tackles_won}/{stats.tackles_attempted}")
+              f"tackles={stats.tackles_won}/{stats.tackles_attempted}; fouls={stats.fouls_committed}; "
+              f"free kicks taken={stats.free_kicks_taken}")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
-    print("Neutral-attribute demo: values are provisional, restarts are instantaneous.")
+    print("Neutral-attribute demo: values are provisional, restart handling is simplified.")
 
 
 if __name__ == "__main__":

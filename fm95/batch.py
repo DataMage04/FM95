@@ -83,7 +83,8 @@ def main():
               f"passes={stats['passes_attempted']:.2f}, "
               f"completion={stats['pass_completion_percentage']:.1f}%, "
               f"possession={stats['possession_percentage']:.1f}%, "
-              f"take-ons={stats['dribbles_attempted']:.2f}, tackles won={stats['tackles_won']:.2f}")
+              f"take-ons={stats['dribbles_attempted']:.2f}, tackles won={stats['tackles_won']:.2f}, "
+              f"fouls={stats['fouls_committed']:.2f}")
     print("Synthetic baseline; probabilities are uncalibrated. Use --json for all metrics.")
 
 

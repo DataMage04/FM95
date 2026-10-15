@@ -13,7 +13,7 @@ from fm95.pitch import Direction, Zone
 class DribblingTests(unittest.TestCase):
     def config(self, success=1):
         return ActionConfig(interval_seconds=1, shot_probability=0, dribble_probability=1,
-                            dribble_success_probability=success)
+                            dribble_success_probability=success, foul_probability=0)
 
     def test_forced_take_on_outcomes_and_statistics(self):
         for success in (0, 1):
