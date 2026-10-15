@@ -2,13 +2,14 @@ import unittest
 
 from fm95.match import Match, Phase, Team
 from main import demo_team
+from fm95.actions import ActionConfig
 
 
 class MatchTests(unittest.TestCase):
     def setUp(self):
         self.home = demo_team("h", "Home")
         self.away = demo_team("a", "Away")
-        self.match = Match(self.home, self.away)
+        self.match = Match(self.home, self.away, action_config=ActionConfig(shot_probability=0))
 
     def test_lifecycle_boundaries(self):
         self.match.start()

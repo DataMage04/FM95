@@ -10,7 +10,7 @@ from main import demo_team
 class PassingTests(unittest.TestCase):
     def make_match(self, probability=.85, interval=6):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
-                     action_config=ActionConfig(interval, probability))
+                     action_config=ActionConfig(interval, probability, shot_probability=0))
 
     def advance(self, match, seconds):
         for _ in range(seconds):

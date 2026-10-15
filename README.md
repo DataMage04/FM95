@@ -72,13 +72,37 @@ Each pass creates one `pass_completed` or `pass_intercepted` event. `team_id` an
 `player_id` identify the passing team and passer; `receiver_id` is the intended
 recipient, `interceptor_id` identifies the winner on failure, `origin` is the
 starting zone, and `zone` is the destination. The CLI shows ten sample passes,
-lifecycle events and pass totals. Shots and goals remain pending.
+lifecycle events and pass totals.
+
+## Shooting and restarts
+
+On each action, an attacking-third carrier now chooses to shoot with probability
+0.12; otherwise they pass. Defensive and middle-third carriers always pass.
+A shot is on target with probability 0.40. An on-target shot becomes a goal with
+probability 0.25, otherwise the goalkeeper holds it. Thus the baseline goal
+probability per shot is 0.40 × 0.25 = 0.10. These are uncalibrated design settings,
+not an empirical xG model. All players and attacking-third lanes use the same values.
+Set `shot_probability`, `on_target_probability`, and
+`goal_given_on_target_probability` on `ActionConfig` to change them.
+
+Each attempt emits exactly one outcome: `goal`, `shot_saved` or `shot_missed`.
+The event identifies the shooting team, shooter, shot zone and defending keeper
+via `goalkeeper_id`. A goal increments the score and immediately emits a kickoff
+for the conceding team at centre. A held save gives the keeper possession in the
+centre lane of their defensive column. A miss emits an immediate `goal_kick`
+event and gives the keeper possession at that same coarse location. The keeper
+can distribute via a pass on the next action.
+
+Restarts currently take no simulated time; shot events and resulting restarts
+share a timestamp. Corners, blocks, rebounds, offside, restart delays and added
+time are deferred. Whistles still prevent any action at exactly 45 or 90 minutes.
+The CLI now includes all shots and restarts, with per-team attempts, shots on
+target (goals plus saves), goals and passing totals derived from the event log.
 
 ## Next increments within milestone 1
 
-1. Add pass-versus-shot selection and goalkeeper outcomes; goals update state and events.
-2. Introduce attributes only where an implemented action needs them.
-3. Add restarts, tactics and match statistics, then calibrate batch simulations.
+1. Add richer action context and introduce attributes where actions need them.
+2. Expand restarts and tactics, track possession time, then calibrate batch simulations.
 
 Keep the engine independent of interfaces and persistence. Future text,
 desktop or web interfaces should consume the same match state and events.

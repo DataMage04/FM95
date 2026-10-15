@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from random import Random
 from typing import TYPE_CHECKING
 
-from fm95.pitch import Direction, Zone
+from fm95.pitch import Direction, Third, Zone
 
 if TYPE_CHECKING:
     from fm95.match import Possession, Team
@@ -14,12 +14,35 @@ if TYPE_CHECKING:
 class ActionConfig:
     interval_seconds: int = 6
     completion_probability: float = 0.85
+    shot_probability: float = 0.12
+    on_target_probability: float = 0.40
+    goal_given_on_target_probability: float = 0.25
 
     def __post_init__(self):
         if type(self.interval_seconds) is not int or self.interval_seconds < 1:
             raise ValueError("Action interval must be a positive integer.")
-        if not 0 <= self.completion_probability <= 1:
-            raise ValueError("Completion probability must be between 0 and 1.")
+        for name in ("completion_probability", "shot_probability",
+                     "on_target_probability", "goal_given_on_target_probability"):
+            if not 0 <= getattr(self, name) <= 1:
+                raise ValueError(f"{name} must be between 0 and 1.")
+
+
+def choose_action(zone: Zone, direction: Direction, rng: Random,
+                  config: ActionConfig) -> str:
+    """Only attacking-third carriers shoot in this coarse baseline."""
+    if zone.third_for(direction) == Third.ATTACKING:
+        if rng.random() < config.shot_probability:
+            return "shot"
+    return "pass"
+
+
+def resolve_shot(rng: Random, config: ActionConfig) -> str:
+    """On-target attempts become either goals or held saves; no rebounds yet."""
+    if rng.random() >= config.on_target_probability:
+        return "shot_missed"
+    if rng.random() < config.goal_given_on_target_probability:
+        return "goal"
+    return "shot_saved"
 
 
 @dataclass(frozen=True)

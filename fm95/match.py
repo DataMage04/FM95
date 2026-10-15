@@ -1,10 +1,10 @@
-"""Match lifecycle. Football actions will be added independently of the clock."""
+"""Match lifecycle and application of resolved football actions."""
 
 from dataclasses import dataclass
 from enum import Enum
 from random import Random
 
-from fm95.actions import ActionConfig, resolve_pass
+from fm95.actions import ActionConfig, choose_action, resolve_pass, resolve_shot
 from fm95.pitch import CENTRE, Direction, Zone
 
 
@@ -48,6 +48,7 @@ class MatchEvent:
     receiver_id: str | None = None
     interceptor_id: str | None = None
     origin: Zone | None = None
+    goalkeeper_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +165,10 @@ class Match:
             raise RuntimeError("An action requires active possession.")
         attacking = self._team(possession.team_id)
         defending = self.away if attacking.id == self.home.id else self.home
+        if choose_action(possession.zone, self.attacking_direction(attacking.id),
+                         self._rng, self.action_config) == "shot":
+            self._play_shot(possession, attacking, defending)
+            return
         result = resolve_pass(possession, attacking, defending,
                               self.attacking_direction(attacking.id), self._rng,
                               self.action_config)
@@ -177,3 +182,25 @@ class Match:
             attacking.id, possession.player_id, result.zone, result.receiver_id,
             result.interceptor_id, possession.zone,
         ))
+
+    def _play_shot(self, possession: Possession, attacking: Team, defending: Team):
+        outcome = resolve_shot(self._rng, self.action_config)
+        goalkeeper = next(p for p in defending.lineup if p.is_goalkeeper)
+        self.events.append(MatchEvent(
+            self.elapsed_seconds, outcome, attacking.id, possession.player_id,
+            possession.zone, origin=possession.zone, goalkeeper_id=goalkeeper.id,
+        ))
+        if outcome == "goal":
+            if attacking.id == self.home.id:
+                self.home_goals += 1
+            else:
+                self.away_goals += 1
+            self._kickoff(defending)
+        else:
+            # Held save or instant goal-kick restart in the keeper's defensive zone.
+            column = 0 if self.attacking_direction(defending.id) == Direction.RIGHT else 2
+            zone = Zone(column, 1)
+            self._possession = Possession(defending.id, goalkeeper.id, zone)
+            if outcome == "shot_missed":
+                self.events.append(MatchEvent(self.elapsed_seconds, "goal_kick",
+                                              defending.id, goalkeeper.id, zone))
