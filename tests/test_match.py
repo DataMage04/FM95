@@ -24,7 +24,8 @@ class MatchTests(unittest.TestCase):
             self.match.step()
         self.assertEqual(self.match.phase, Phase.FULL_TIME)
         self.assertEqual(self.match.elapsed_seconds, 5400)
-        self.assertEqual([(e.kind, e.elapsed_seconds, e.team_id) for e in self.match.events],
+        self.assertEqual([(e.kind, e.elapsed_seconds, e.team_id) for e in self.match.events
+                          if e.kind in ("kickoff", "half_time", "full_time")],
                          [("kickoff", 0, "h"), ("half_time", 2700, None),
                           ("kickoff", 2700, "a"), ("full_time", 5400, None)])
         with self.assertRaises(RuntimeError):

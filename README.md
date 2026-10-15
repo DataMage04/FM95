@@ -45,14 +45,40 @@ ownership/location change. It will be used by future football actions; it does
 not simulate a pass, tackle, ball trajectory or loose ball itself.
 
 Kickoff and possession events also carry the player and zone, preserving the
-location at the event time. The demo still has no autonomous football actions.
+location at the event time.
+
+## Autonomous passing baseline
+
+`Match(..., seed=95)` uses a private random generator for reproducible runs.
+Every six simulated seconds, the carrier attempts a pass to another outfield
+teammate. The ball can stay in its current zone or move one neighbouring zone.
+Legal forward destinations have weight 3; same-zone, lateral and backward choices
+have weight 1 each. Teams use their current attacking direction.
+
+Pass completion has a provisional probability of 0.85 for every player and zone.
+Completed passes transfer ownership to the receiver. Every failed pass is currently
+an interception by a randomly selected opposition outfield player at the intended
+destination. There are no loose balls, out-of-play passes or player positions yet.
+These simplifications establish state transitions; they are not calibrated football
+statistics. Players are equally capable and goalkeepers are excluded as receivers
+and interceptors in this baseline.
+
+`ActionConfig(interval_seconds=6, completion_probability=0.85)` can be supplied
+as `Match(..., action_config=config)`. Whistles take priority over actions; kickoff
+resets the action timer. Seeded reproducibility assumes the same inputs, engine
+version and Python runtime. Real-time display speed does not affect outcomes.
+
+Each pass creates one `pass_completed` or `pass_intercepted` event. `team_id` and
+`player_id` identify the passing team and passer; `receiver_id` is the intended
+recipient, `interceptor_id` identifies the winner on failure, `origin` is the
+starting zone, and `zone` is the destination. The CLI shows ten sample passes,
+lifecycle events and pass totals. Shots and goals remain pending.
 
 ## Next increments within milestone 1
 
-1. Add action selection and pass/turnover resolution, initially with equal players.
-2. Add shots and goalkeeper outcomes; goals update both state and event log.
-3. Introduce attributes only where an implemented action needs them.
-4. Add restarts, tactics and match statistics, then calibrate batch simulations.
+1. Add pass-versus-shot selection and goalkeeper outcomes; goals update state and events.
+2. Introduce attributes only where an implemented action needs them.
+3. Add restarts, tactics and match statistics, then calibrate batch simulations.
 
 Keep the engine independent of interfaces and persistence. Future text,
 desktop or web interfaces should consume the same match state and events.

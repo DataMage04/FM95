@@ -2,7 +2,9 @@
 
 from dataclasses import dataclass
 from enum import Enum
+from random import Random
 
+from fm95.actions import ActionConfig, resolve_pass
 from fm95.pitch import CENTRE, Direction, Zone
 
 
@@ -43,6 +45,9 @@ class MatchEvent:
     team_id: str | None = None
     player_id: str | None = None
     zone: Zone | None = None
+    receiver_id: str | None = None
+    interceptor_id: str | None = None
+    origin: Zone | None = None
 
 
 @dataclass(frozen=True)
@@ -63,7 +68,8 @@ class Match:
 
     HALF_SECONDS = 45 * 60
 
-    def __init__(self, home: Team, away: Team):
+    def __init__(self, home: Team, away: Team, *, seed: int | None = None,
+                 action_config: ActionConfig | None = None):
         if home.id == away.id:
             raise ValueError("A team cannot play itself.")
         if {p.id for p in home.lineup} & {p.id for p in away.lineup}:
@@ -77,6 +83,9 @@ class Match:
         self.events: list[MatchEvent] = []
         self._possession: Possession | None = None
         self._ends_switched = False
+        self._rng = Random(seed)
+        self.action_config = action_config if action_config is not None else ActionConfig()
+        self._seconds_since_action = 0
 
     @property
     def possession(self) -> Possession | None:
@@ -114,6 +123,7 @@ class Match:
         # Temporary deterministic choice until positions and kickoff selection exist.
         taker = next(player for player in team.lineup if not player.is_goalkeeper)
         self._possession = Possession(team.id, taker.id, CENTRE)
+        self._seconds_since_action = 0
         self.events.append(MatchEvent(self.elapsed_seconds, "kickoff", team.id,
                                       taker.id, CENTRE))
 
@@ -134,7 +144,6 @@ class Match:
         if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
             raise RuntimeError("The clock can advance only during play.")
         self.elapsed_seconds += 1
-        # Future: update football actions here, separately from lifecycle logic.
         if self.phase == Phase.FIRST_HALF and self.elapsed_seconds == self.HALF_SECONDS:
             self.phase = Phase.HALF_TIME
             self._possession = None
@@ -143,3 +152,28 @@ class Match:
             self.phase = Phase.FULL_TIME
             self._possession = None
             self.events.append(MatchEvent(self.elapsed_seconds, "full_time"))
+        else:
+            self._seconds_since_action += 1
+            if self._seconds_since_action >= self.action_config.interval_seconds:
+                self._play_action()
+                self._seconds_since_action = 0
+
+    def _play_action(self):
+        possession = self._possession
+        if possession is None:
+            raise RuntimeError("An action requires active possession.")
+        attacking = self._team(possession.team_id)
+        defending = self.away if attacking.id == self.home.id else self.home
+        result = resolve_pass(possession, attacking, defending,
+                              self.attacking_direction(attacking.id), self._rng,
+                              self.action_config)
+        if result.completed:
+            self._possession = Possession(attacking.id, result.receiver_id, result.zone)
+        else:
+            self._possession = Possession(defending.id, result.interceptor_id, result.zone)
+        # One action event records the passer, intended receiver, destination and outcome.
+        self.events.append(MatchEvent(
+            self.elapsed_seconds, "pass_completed" if result.completed else "pass_intercepted",
+            attacking.id, possession.player_id, result.zone, result.receiver_id,
+            result.interceptor_id, possession.zone,
+        ))
