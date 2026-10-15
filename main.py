@@ -43,8 +43,10 @@ def main():
               f"{stats.possession_percentage:.1f}% possession; model xG={stats.expected_goals:.2f}; "
               f"take-ons={stats.dribbles_completed}/{stats.dribbles_attempted}; "
               f"tackles={stats.tackles_won}/{stats.tackles_attempted}; fouls={stats.fouls_committed}; "
-              f"free kicks taken={stats.free_kicks_taken}")
+              f"free kicks taken={stats.free_kicks_taken}; "
+              f"cards={stats.yellow_cards}Y/{stats.red_cards}R")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
+    print(f"Match status: {match.phase.value}")
     print("Neutral-attribute demo: values are provisional, restart handling is simplified.")
 
 

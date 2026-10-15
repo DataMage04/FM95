@@ -243,10 +243,52 @@ free kick; added-time handling remains unfinished.
 Possession is credited to the awarded team while awaiting that next action,
 under the existing coarse possession-time convention. There is no separate
 dead-ball clock yet. All fouls currently award the same prototype free kick:
-penalty-area geometry/penalties, direct free-kick shots, advantage, cards, severity
+penalty-area geometry/penalties, direct free-kick shots, advantage, severity
 and discipline attributes are deferred. This is an incremental game model rather
 than a complete implementation of football rules. Calibration remains deferred
 until all intended Milestone 1 features are in place.
+
+## Discipline and active players
+
+Fouls can now generate a straight red or a yellow. Provisional config fields are
+`straight_red_probability=0.01` and `yellow_card_probability=0.20`; the latter is
+conditional on no straight red. Both may be set to zero to disable sanctions.
+These are temporary sampling rules, not an offence-severity or referee model.
+No discipline/aggression attribute is added until a corresponding behavior exists.
+
+`match.discipline(team_id, player_id)` returns an immutable snapshot of yellow
+count and dismissal status. A second yellow emits both `yellow_card` and
+`red_card` events; the red's reason is `second_yellow`. A direct dismissal uses
+`straight_red`. Yellow totals count cautions shown (including second yellows);
+red totals count dismissals. Cards persist across halftime and are match-local.
+
+`match.active_players(team_id)` returns the current eligible players. Starting
+lineups stay intact for historical identity. All autonomous actions use active
+player views: dismissed players cannot pass, receive, intercept, challenge, shoot,
+take restarts or keep goal. Explicit possession changes reject dismissed players.
+The engine does not automatically rebalance positions after a dismissal.
+
+An emergency goalkeeper is assigned from the first remaining active outfield
+player if the current keeper is dismissed. Their existing shot-stopping attribute
+is used; their starting lineup record remains unchanged. Manager-chosen keeper
+replacement and substitutions are deferred. Automatic fouls currently involve
+outfield challengers only; keeper dismissal can be exercised through the resolved
+sanction API `match.issue_card(team_id, player_id, "red")`. This API also supports
+deterministic development scenarios; if it dismisses the current carrier or
+restart taker, the engine reassigns that role to an active teammate at the same
+zone without advancing time. It does not itself create a foul or new restart.
+
+If a dismissal leaves fewer than seven players, the match enters terminal
+`Phase.ABANDONED`, clears possession/restarts and emits `match_abandoned`.
+It does not invent a forfeit score. The runner stops at either full time or
+abandonment. Batch summaries count abandoned matches separately; scorelines and
+averages include completed matches only. `completed_matches` gives the denominator;
+with none completed, numeric average fields are zero placeholders.
+
+Relevant rule references: [IFAB Law 3](https://theifab.com/laws/latest/the-players/)
+and [IFAB Law 12](https://theifab.com/laws/latest/fouls-and-misconduct/).
+Offence classification, advantage, post-match sanctions, suspensions and appeals
+remain outside this increment. Probability and attribute calibration remain deferred.
 
 ## Assigned positions and operating zones
 

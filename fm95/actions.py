@@ -9,7 +9,7 @@ from fm95.attributes import ability_multiplier
 from fm95.positions import involvement_weight
 
 if TYPE_CHECKING:
-    from fm95.match import Possession, Team
+    from fm95.match import Possession, Team, TeamInPlay
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,8 @@ class ActionConfig:
     dribble_probability: float = 0.15
     dribble_success_probability: float = 0.60
     foul_probability: float = 0.08
+    straight_red_probability: float = 0.01
+    yellow_card_probability: float = 0.20
 
     def __post_init__(self):
         if type(self.interval_seconds) is not int or self.interval_seconds < 1:
@@ -31,9 +33,18 @@ class ActionConfig:
         for name in ("completion_probability", "shot_probability",
                      "on_target_probability", "goal_given_on_target_probability", "context_strength",
                      "attribute_strength", "dribble_probability", "dribble_success_probability",
-                     "foul_probability"):
+                     "foul_probability", "straight_red_probability", "yellow_card_probability"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must be between 0 and 1.")
+
+
+def foul_card(rng: Random, config: ActionConfig) -> str | None:
+    """Provisional sanctions: red first, then conditional yellow; no severity model yet."""
+    if config.straight_red_probability > 0 and rng.random() < config.straight_red_probability:
+        return "red"
+    if config.yellow_card_probability > 0 and rng.random() < config.yellow_card_probability:
+        return "yellow"
+    return None
 
 
 def adjust_probability(base: float, multiplier: float, strength: float) -> float:
@@ -108,7 +119,7 @@ class DribbleResult:
     fouled: bool = False
 
 
-def resolve_dribble(possession: "Possession", attacking: "Team", defending: "Team",
+def resolve_dribble(possession: "Possession", attacking: "Team | TeamInPlay", defending: "Team | TeamInPlay",
                     direction: Direction, rng: Random, config: ActionConfig) -> DribbleResult:
     """A direct contest: win advances the carrier; loss leaves ball at the challenge zone."""
     carrier = next(p for p in attacking.lineup if p.id == possession.player_id)
@@ -164,7 +175,7 @@ class PassResult:
     completion_probability: float
 
 
-def resolve_pass(possession: "Possession", attacking: "Team", defending: "Team",
+def resolve_pass(possession: "Possession", attacking: "Team | TeamInPlay", defending: "Team | TeamInPlay",
                  direction: Direction, rng: Random, config: ActionConfig) -> PassResult:
     """Choose an outfield receiver and nearby destination, then resolve the pass.
 

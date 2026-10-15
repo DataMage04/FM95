@@ -13,7 +13,7 @@ from fm95.match import Match, Phase
 def run_match(match: Match) -> Match:
     """Run a fresh match to full time, automatically resuming halftime."""
     match.start()
-    while match.phase != Phase.FULL_TIME:
+    while match.phase not in (Phase.FULL_TIME, Phase.ABANDONED):
         if match.phase == Phase.HALF_TIME:
             match.resume()
         else:
@@ -30,10 +30,17 @@ def run_batch(matches: int = 200, seed: int = 95,
         raise ValueError("Base seed must be an integer.")
     config = config if config is not None else ActionConfig()
     teams = (demo_team("home", "Home"), demo_team("away", "Away"))
-    totals = {team.id: Counter() for team in teams}
+    initial = Match(*teams)
+    totals = {team.id: Counter({key: 0 for key in asdict(initial.statistics(team.id))
+                               if key != "team_id"}) for team in teams}
     outcomes, scorelines = Counter(), Counter()
+    completed = 0
     for index in range(matches):
         match = run_match(Match(*teams, seed=seed + index, action_config=config))
+        if match.phase == Phase.ABANDONED:
+            outcomes["abandoned"] += 1
+            continue
+        completed += 1
         for team in teams:
             values = asdict(match.statistics(team.id))
             values.pop("team_id")
@@ -44,14 +51,16 @@ def run_batch(matches: int = 200, seed: int = 95,
         scorelines[f"{home_goals}-{away_goals}"] += 1
     averages = {}
     for team_id, total in totals.items():
-        averages[team_id] = {key: value / matches for key, value in total.items()}
+        averages[team_id] = {key: value / completed if completed else 0.0
+                             for key, value in total.items()}
         averages[team_id]["pass_completion_percentage"] = (
             100 * total["passes_completed"] / total["passes_attempted"]
             if total["passes_attempted"] else 0.0
         )
     return {
-        "matches": matches, "base_seed": seed, "configuration": asdict(config),
-        "outcomes": {key: outcomes[key] for key in ("home_win", "draw", "away_win")},
+        "matches": matches, "completed_matches": completed,
+        "base_seed": seed, "configuration": asdict(config),
+        "outcomes": {key: outcomes[key] for key in ("home_win", "draw", "away_win", "abandoned")},
         "average_total_goals": averages["home"]["goals"] + averages["away"]["goals"],
         "team_averages": averages, "scorelines": dict(sorted(scorelines.items())),
     }
@@ -84,7 +93,9 @@ def main():
               f"completion={stats['pass_completion_percentage']:.1f}%, "
               f"possession={stats['possession_percentage']:.1f}%, "
               f"take-ons={stats['dribbles_attempted']:.2f}, tackles won={stats['tackles_won']:.2f}, "
-              f"fouls={stats['fouls_committed']:.2f}")
+              f"fouls={stats['fouls_committed']:.2f}, "
+              f"cards={stats['yellow_cards']:.2f}Y/{stats['red_cards']:.2f}R")
+    print(f"Averages and scorelines cover {summary['completed_matches']} completed matches.")
     print("Synthetic baseline; probabilities are uncalibrated. Use --json for all metrics.")
 
 

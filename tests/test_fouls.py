@@ -12,7 +12,8 @@ class FoulTests(unittest.TestCase):
     def make_match(self):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
             action_config=ActionConfig(interval_seconds=1, shot_probability=0,
-                dribble_probability=1, foul_probability=1, completion_probability=1))
+                dribble_probability=1, foul_probability=1, completion_probability=1,
+                straight_red_probability=0, yellow_card_probability=0))
 
     def test_foul_stops_take_on_and_awards_correct_team(self):
         match = self.make_match()

@@ -1,10 +1,10 @@
 """Match lifecycle and application of resolved football actions."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from random import Random
 
-from fm95.actions import ActionConfig, choose_action, resolve_pass, resolve_shot, resolve_dribble
+from fm95.actions import ActionConfig, choose_action, resolve_pass, resolve_shot, resolve_dribble, foul_card
 from fm95.pitch import CENTRE, Direction, Zone
 from fm95.statistics import TeamStats, team_statistics
 from fm95.attributes import Attributes
@@ -51,6 +51,20 @@ class Phase(str, Enum):
     HALF_TIME = "half_time"
     SECOND_HALF = "second_half"
     FULL_TIME = "full_time"
+    ABANDONED = "abandoned"
+
+
+@dataclass(frozen=True)
+class TeamInPlay:
+    id: str
+    name: str
+    lineup: tuple[Player, ...]
+
+
+@dataclass(frozen=True)
+class Discipline:
+    yellow_cards: int
+    sent_off: bool
 
 
 @dataclass(frozen=True)
@@ -76,6 +90,7 @@ class MatchEvent:
     defender_tackling: float | None = None
     fouled_player_id: str | None = None
     foul_probability: float | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -124,6 +139,61 @@ class Match:
         self._seconds_since_action = 0
         self._possession_seconds = {home.id: 0, away.id: 0}
         self._pending_restart: Restart | None = None
+        self._yellow_cards: dict[str, int] = {}
+        self._dismissed: set[str] = set()
+        self._emergency_keepers: dict[str, str] = {}
+
+    def discipline(self, team_id: str, player_id: str) -> Discipline:
+        if player_id not in {p.id for p in self._team(team_id).lineup}:
+            raise ValueError("Player must belong to the selected team.")
+        return Discipline(self._yellow_cards.get(player_id, 0), player_id in self._dismissed)
+
+    def active_players(self, team_id: str) -> tuple[Player, ...]:
+        team = self._team(team_id)
+        return tuple(replace(p, is_goalkeeper=True, position=Position.GK)
+                     if p.id == self._emergency_keepers.get(team_id) else p
+                     for p in team.lineup if p.id not in self._dismissed)
+
+    def _active_team(self, team_id: str) -> TeamInPlay:
+        team = self._team(team_id)
+        return TeamInPlay(team.id, team.name, self.active_players(team_id))
+
+    def issue_card(self, team_id: str, player_id: str, card: str):
+        """Apply a resolved sanction; also supports deterministic development scenarios."""
+        if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
+            raise RuntimeError("Cards can be issued only during play in this prototype.")
+        self.discipline(team_id, player_id)
+        if card not in ("yellow", "red"):
+            raise ValueError("Card must be 'yellow' or 'red'.")
+        if player_id in self._dismissed:
+            raise ValueError("Player has already been dismissed.")
+        if card == "yellow":
+            self._yellow_cards[player_id] = self._yellow_cards.get(player_id, 0) + 1
+            self.events.append(MatchEvent(self.elapsed_seconds, "yellow_card", team_id, player_id))
+            if self._yellow_cards[player_id] < 2:
+                return
+        self._dismissed.add(player_id)
+        self.events.append(MatchEvent(self.elapsed_seconds, "red_card", team_id, player_id,
+                                      reason="second_yellow" if card == "yellow" else "straight_red"))
+        if len(self.active_players(team_id)) < 7:
+            self.phase = Phase.ABANDONED
+            self._possession = None
+            self._pending_restart = None
+            self.events.append(MatchEvent(self.elapsed_seconds, "match_abandoned", team_id,
+                                          reason="fewer_than_seven_players"))
+            return
+        active = self.active_players(team_id)
+        if not any(p.is_goalkeeper for p in active):
+            replacement = active[0]
+            self._emergency_keepers[team_id] = replacement.id
+            self.events.append(MatchEvent(self.elapsed_seconds, "goalkeeper_changed", team_id,
+                                          replacement.id, reason="emergency_after_dismissal"))
+            active = self.active_players(team_id)
+        if self._possession is not None and self._possession.player_id == player_id:
+            replacement = next(p for p in active if not p.is_goalkeeper)
+            self._possession = Possession(team_id, replacement.id, self._possession.zone)
+            if self._pending_restart is not None:
+                self._pending_restart = replace(self._pending_restart, taker_id=replacement.id)
 
     @property
     def pending_restart(self) -> Restart | None:
@@ -146,7 +216,7 @@ class Match:
 
     def player_operating_zone(self, team_id: str, player_id: str) -> Zone:
         team = self._team(team_id)
-        player = next((p for p in team.lineup if p.id == player_id), None)
+        player = next((p for p in self.active_players(team.id) if p.id == player_id), None)
         if player is None:
             raise ValueError("Player must belong to the selected team.")
         return operating_zone(player.position, self.attacking_direction(team_id))
@@ -166,7 +236,7 @@ class Match:
         if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
             raise RuntimeError("Possession can change only during play.")
         team = self._team(team_id)
-        if player_id not in {player.id for player in team.lineup}:
+        if player_id not in {player.id for player in self.active_players(team.id)}:
             raise ValueError("The ball carrier must be in the possessing team's lineup.")
         if not isinstance(zone, Zone):
             raise ValueError("Ball location must be a Zone.")
@@ -176,6 +246,7 @@ class Match:
                                       player_id, zone))
 
     def _kickoff(self, team: Team):
+        team = self._active_team(team.id)
         taker = next((player for player in team.lineup if player.position == Position.ST),
                      next(player for player in team.lineup if not player.is_goalkeeper))
         self._possession = Possession(team.id, taker.id, CENTRE)
@@ -224,8 +295,8 @@ class Match:
         possession = self._possession
         if possession is None:
             raise RuntimeError("An action requires active possession.")
-        attacking = self._team(possession.team_id)
-        defending = self.away if attacking.id == self.home.id else self.home
+        attacking = self._active_team(possession.team_id)
+        defending = self._active_team(self.away.id if attacking.id == self.home.id else self.home.id)
         carrier = next(p for p in attacking.lineup if p.id == possession.player_id)
         if self._pending_restart is not None:
             restart = self._pending_restart
@@ -249,6 +320,11 @@ class Match:
                     possession.zone, fouled_player_id=possession.player_id,
                     foul_probability=self.action_config.foul_probability,
                 ))
+                card = foul_card(self._rng, self.action_config)
+                if card is not None:
+                    self.issue_card(defending.id, result.defender_id, card)
+                    if self.phase == Phase.ABANDONED:
+                        return
                 self._pending_restart = Restart("free_kick", attacking.id,
                                                 possession.player_id, possession.zone)
                 self.events.append(MatchEvent(self.elapsed_seconds, "free_kick_awarded",
@@ -281,7 +357,7 @@ class Match:
                                 if p.id == possession.player_id),
         ))
 
-    def _play_shot(self, possession: Possession, attacking: Team, defending: Team):
+    def _play_shot(self, possession: Possession, attacking: TeamInPlay, defending: TeamInPlay):
         goalkeeper = next(p for p in defending.lineup if p.is_goalkeeper)
         shooter = next(p for p in attacking.lineup if p.id == possession.player_id)
         result = resolve_shot(possession.zone, self._rng, self.action_config,
