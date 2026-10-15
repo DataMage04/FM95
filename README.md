@@ -39,7 +39,7 @@ converts a fixed location into that team's defensive, middle or attacking third.
 
 `match.possession` contains the team ID, carrier ID and zone together, or is
 `None` before kickoff, at halftime and at full time. Kickoff assigns the ball
-at centre to the first outfield player in lineup order, a temporary convention.
+at centre to the first striker, falling back to the first outfield player.
 `set_possession(team_id, player_id, zone)` validates and records a resolved
 ownership/location change. It will be used by future football actions; it does
 not simulate a pass, tackle, ball trajectory or loose ball itself.
@@ -58,7 +58,8 @@ have weight 1 each. Teams use their current attacking direction.
 Pass completion has a provisional base probability of 0.85, modified by context below.
 Completed passes transfer ownership to the receiver. Every failed pass is currently
 an interception by a randomly selected opposition outfield player at the intended
-destination. There are no loose balls, out-of-play passes or player positions yet.
+destination. There are no loose balls or out-of-play passes yet. Assigned positions
+weight involvement through coarse operating zones rather than tracked coordinates.
 These simplifications establish state transitions; they are not calibrated football
 statistics. Demo players have neutral attributes and goalkeepers are excluded as receivers
 and interceptors in this baseline.
@@ -138,7 +139,7 @@ settings change the seeded results from earlier engine versions.
 
 ### Planned work
 
-1. Add player roles and defensive interactions, then expand tactics and restarts.
+1. Add defensive interactions and tactical roles, then expand tactics and restarts.
 2. Complete intended match-engine features and verify their behavior.
 3. Calibrate attribute ranges, distributions and probability effects together at the
    end of Milestone 1. Until then, batch runs diagnose behavior rather than tune averages.
@@ -180,6 +181,41 @@ it is this engine's scoring probability, not a player-independent empirical xG.
 `demo_team(..., attributes=Attributes(...))` supports development scenarios; the
 default demo and batch teams remain neutral. Calibration of values, ranges and
 effect sizes is explicitly deferred until all intended Milestone 1 features exist.
+
+## Assigned positions and operating zones
+
+`Player(..., position=Position.ST)` assigns a lineup position independently of
+ability. Existing players without an explicit position default to GK for keepers
+or CM for outfield players. Goalkeeper designation and position must agree.
+Supported positions are GK, CB, LB, RB, DM, CM, AM, LW, RW and ST.
+
+The demo uses a basic 4–3–3: GK; RB, CB, CB, LB; DM, CM, CM; ST, RW, LW.
+These are assigned match positions, not natural-position proficiency or tactical
+duties. Custom lineups may use other combinations; only the existing 11-player
+and one-goalkeeper constraints apply.
+
+Each position has an anchor relative to its team: defenders in the defensive
+column, midfielders in the middle, forwards in the attacking column. Fullbacks
+and wingers use their respective flank; other positions use the centre lane.
+The 3×3 grid currently gives DM, CM and AM the same anchor, and both CBs share
+one zone. `match.player_operating_zone(team_id, player_id)` exposes the fixed-grid
+anchor. Switching ends rotates both column and lane, preserving team-relative
+left and right: LW operates top-right when attacking right and bottom-left when
+attacking left.
+
+After choosing a pass destination, the resolver weights other outfield teammates
+by `1 / (1 + Manhattan distance from anchor to destination)^2`. Interceptors use
+the same rule with the defending team's opposite direction. Nearby positions are
+favoured but distant players remain eligible, allowing involvement away from an
+anchor. The carrier and both goalkeepers remain excluded from receiver/interceptor
+selection as appropriate. Position influences involvement, not intrinsic passing
+or finishing ability.
+
+Anchors are operating preferences, not actual locations or movement constraints.
+Possession's zone remains the ball carrier's current ball location, even away
+from their anchor. Dynamic movement, marking, formation changes, tactical roles
+and positional familiarity are deferred. No probabilities or attribute ranges
+were calibrated in this increment.
 
 ## Match statistics and batch diagnostics
 

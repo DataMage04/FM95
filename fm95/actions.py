@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from fm95.pitch import Direction, Third, Zone
 from fm95.attributes import ability_multiplier
+from fm95.positions import involvement_weight
 
 if TYPE_CHECKING:
     from fm95.match import Possession, Team
@@ -120,12 +121,11 @@ def resolve_pass(possession: "Possession", attacking: "Team", defending: "Team",
     """Choose an outfield receiver and nearby destination, then resolve the pass.
 
     Forward destinations have weight 3; sideways and backward destinations weight 1.
-    All legal choices remain inside the pitch. Receivers have no spatial positions
-    yet, so all other outfield teammates are equally eligible.
+    All legal choices remain inside the pitch. Assigned operating zones weight
+    receivers and interceptors; these are not actual player coordinates.
     """
     receivers = [p for p in attacking.lineup
                  if not p.is_goalkeeper and p.id != possession.player_id]
-    receiver = rng.choice(receivers)
     origin = possession.zone
     destinations = [origin]
     weights = [1]
@@ -135,11 +135,18 @@ def resolve_pass(possession: "Possession", attacking: "Team", defending: "Team",
             destinations.append(Zone(column, lane))
             weights.append(3 if dx == int(direction) else 1)
     destination = rng.choices(destinations, weights=weights, k=1)[0]
+    receiver = rng.choices(receivers, weights=[
+        involvement_weight(p.position, destination, direction) for p in receivers
+    ], k=1)[0]
     passer = next(p for p in attacking.lineup if p.id == possession.player_id)
     probability = pass_completion_chance(origin, destination, direction, config,
                                          passing=passer.attributes.passing)
     completed = rng.random() < probability
-    interceptor = None if completed else rng.choice(
-        [p for p in defending.lineup if not p.is_goalkeeper]
-    ).id
+    interceptor = None
+    if not completed:
+        defenders = [p for p in defending.lineup if not p.is_goalkeeper]
+        defending_direction = Direction(-int(direction))
+        interceptor = rng.choices(defenders, weights=[
+            involvement_weight(p.position, destination, defending_direction) for p in defenders
+        ], k=1)[0].id
     return PassResult(receiver.id, destination, completed, interceptor, probability)

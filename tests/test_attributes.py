@@ -64,6 +64,7 @@ class AttributeTests(unittest.TestCase):
                        else p for p in home.lineup)
         match = Match(Team(home.id, home.name, lineup), away)
         match.start()
+        match.set_possession("h", "h-2", Zone(1, 1))
         result = resolve_pass(match.possession, match.home, match.away, Direction.RIGHT,
                               Random(95), ActionConfig())
         self.assertEqual(result.completion_probability, pass_completion_chance(

@@ -14,13 +14,13 @@ class PossessionTests(unittest.TestCase):
         self.assertIsNone(match.possession)
         match.start()
         self.assertEqual((match.possession.team_id, match.possession.player_id,
-                          match.possession.zone), ("h", "h-2", CENTRE))
+                          match.possession.zone), ("h", "h-9", CENTRE))
         for _ in range(2700):
             match.step()
         self.assertIsNone(match.possession)
         match.resume()
         self.assertEqual((match.possession.team_id, match.possession.player_id,
-                          match.possession.zone), ("a", "a-2", CENTRE))
+                          match.possession.zone), ("a", "a-9", CENTRE))
         for _ in range(2700):
             match.step()
         self.assertIsNone(match.possession)

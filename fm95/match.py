@@ -8,6 +8,7 @@ from fm95.actions import ActionConfig, choose_action, resolve_pass, resolve_shot
 from fm95.pitch import CENTRE, Direction, Zone
 from fm95.statistics import TeamStats, team_statistics
 from fm95.attributes import Attributes
+from fm95.positions import Position, operating_zone
 
 
 @dataclass(frozen=True)
@@ -16,10 +17,17 @@ class Player:
     name: str
     is_goalkeeper: bool = False
     attributes: Attributes = field(default_factory=Attributes)
+    position: Position | None = None
 
     def __post_init__(self):
         if not isinstance(self.attributes, Attributes):
             raise ValueError("Player attributes must be an Attributes instance.")
+        if self.position is None:
+            object.__setattr__(self, "position", Position.GK if self.is_goalkeeper else Position.CM)
+        if not isinstance(self.position, Position):
+            raise ValueError("Player position must be a Position enum value.")
+        if (self.position == Position.GK) != self.is_goalkeeper:
+            raise ValueError("Goalkeeper designation and position must agree.")
 
 
 @dataclass(frozen=True)
@@ -117,6 +125,13 @@ class Match:
         right = (team_id == self.home.id) != self._ends_switched
         return Direction.RIGHT if right else Direction.LEFT
 
+    def player_operating_zone(self, team_id: str, player_id: str) -> Zone:
+        team = self._team(team_id)
+        player = next((p for p in team.lineup if p.id == player_id), None)
+        if player is None:
+            raise ValueError("Player must belong to the selected team.")
+        return operating_zone(player.position, self.attacking_direction(team_id))
+
     def _team(self, team_id: str) -> Team:
         for team in (self.home, self.away):
             if team.id == team_id:
@@ -141,8 +156,8 @@ class Match:
                                       player_id, zone))
 
     def _kickoff(self, team: Team):
-        # Temporary deterministic choice until positions and kickoff selection exist.
-        taker = next(player for player in team.lineup if not player.is_goalkeeper)
+        taker = next((player for player in team.lineup if player.position == Position.ST),
+                     next(player for player in team.lineup if not player.is_goalkeeper))
         self._possession = Possession(team.id, taker.id, CENTRE)
         self._seconds_since_action = 0
         self.events.append(MatchEvent(self.elapsed_seconds, "kickoff", team.id,
