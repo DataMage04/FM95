@@ -6,6 +6,7 @@ from random import Random
 
 from fm95.actions import ActionConfig, choose_action, resolve_pass, resolve_shot
 from fm95.pitch import CENTRE, Direction, Zone
+from fm95.statistics import TeamStats, team_statistics
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,13 @@ class Match:
         self._rng = Random(seed)
         self.action_config = action_config if action_config is not None else ActionConfig()
         self._seconds_since_action = 0
+        self._possession_seconds = {home.id: 0, away.id: 0}
+
+    def statistics(self, team_id: str) -> TeamStats:
+        """Return a fresh immutable snapshot; safe before, during and after play."""
+        team = self._team(team_id)
+        opponent = self.away if team.id == self.home.id else self.home
+        return team_statistics(team.id, opponent.id, self.events, self._possession_seconds)
 
     @property
     def possession(self) -> Possession | None:
@@ -144,6 +152,9 @@ class Match:
     def step(self):
         if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
             raise RuntimeError("The clock can advance only during play.")
+        # Credit [t, t+1) to the owner before actions/whistles at t+1.
+        if self._possession is not None:
+            self._possession_seconds[self._possession.team_id] += 1
         self.elapsed_seconds += 1
         if self.phase == Phase.FIRST_HALF and self.elapsed_seconds == self.HALF_SECONDS:
             self.phase = Phase.HALF_TIME

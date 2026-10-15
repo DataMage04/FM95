@@ -1,24 +1,13 @@
 """Run the FM95 match demo: python main.py."""
 
-from collections import Counter
-from fm95.match import Match, Phase, Player, Team
-
-
-def demo_team(team_id: str, name: str) -> Team:
-    return Team(team_id, name, tuple(
-        Player(f"{team_id}-{n}", f"{name} Player {n}", is_goalkeeper=n == 1)
-        for n in range(1, 12)
-    ))
+from fm95.match import Match
+from fm95.demo import demo_team
+from fm95.batch import run_match
 
 
 def main():
     match = Match(demo_team("home", "Windhoek FC"), demo_team("away", "Coastal FC"), seed=95)
-    match.start()
-    while match.phase != Phase.FULL_TIME:
-        if match.phase == Phase.HALF_TIME:
-            match.resume()
-        else:
-            match.step()
+    run_match(match)
 
     print("First 10 passes, all shots, restarts and match lifecycle events:")
     shown_passes = 0
@@ -37,13 +26,10 @@ def main():
         keeper = f" goalkeeper={event.goalkeeper_id}" if event.goalkeeper_id else ""
         print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{target}{won}{keeper}")
     for team in (match.home, match.away):
-        counts = Counter(e.kind for e in match.events if e.team_id == team.id)
-        completed = counts["pass_completed"]
-        attempts = completed + counts["pass_intercepted"]
-        shots = counts["goal"] + counts["shot_saved"] + counts["shot_missed"]
-        on_target = counts["goal"] + counts["shot_saved"]
-        print(f"{team.name}: {completed}/{attempts} passes completed; "
-              f"{shots} shots, {on_target} on target, {counts['goal']} goals")
+        stats = match.statistics(team.id)
+        print(f"{team.name}: {stats.passes_completed}/{stats.passes_attempted} passes completed; "
+              f"{stats.shots} shots, {stats.shots_on_target} on target, {stats.goals} goals; "
+              f"{stats.possession_percentage:.1f}% possession")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
     print("Equal-player prototype: probabilities are provisional, restarts are instantaneous.")
 

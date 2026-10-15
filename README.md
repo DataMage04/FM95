@@ -23,9 +23,9 @@ second, independent of real time. At 45 minutes the engine pauses;
 `resume()` starts the second half. At 90 minutes the match ends.
 The demo automatically resumes halftime. Added time is deferred.
 
-The score remains 0–0 because no football actions exist yet. This is a lifecycle
-demo, not a complete match simulation. Goalkeeper is a lineup designation;
-there are deliberately no overall ratings or performance attributes yet.
+The prototype now includes passing, interceptions, shots, goals and basic restarts.
+Goalkeeper is a lineup designation; there are deliberately no overall ratings or
+performance attributes yet.
 
 ## Possession foundation
 
@@ -102,7 +102,39 @@ target (goals plus saves), goals and passing totals derived from the event log.
 ## Next increments within milestone 1
 
 1. Add richer action context and introduce attributes where actions need them.
-2. Expand restarts and tactics, track possession time, then calibrate batch simulations.
+2. Expand restarts and tactics, then calibrate batch simulations.
+
+## Match statistics and batch diagnostics
+
+`match.statistics(team_id)` returns a fresh immutable `TeamStats` snapshot before,
+during or after a match. It provides goals, attempted/completed passes, shots,
+shots on target, saves, interceptions, possession seconds, possession percentage
+and pass completion percentage. Event counts provide action statistics; a saved
+opposition shot is credited as a save and an intercepted opposition pass as an
+interception for the defending team.
+
+Each clock step credits one second to the team holding possession at the start
+of that step, before resolving the action or whistle at its end. Halftime accrues
+no time. Possession seconds therefore total 5400 for a complete prototype match.
+Percentages use elapsed credited time, with zero before any play. Instant restarts
+consume no extra time. This convention will need refinement when loose balls,
+ball flight and stoppage durations are introduced.
+
+Run a repeatable diagnostic batch using synthetic equal-ability teams:
+
+```sh
+python -m fm95.batch --matches 200 --seed 95
+python -m fm95.batch --matches 200 --seed 95 --json
+```
+
+Match i uses seed `95 + i` for i starting at zero. The runner retains aggregates
+instead of all event logs. Summaries include configuration, result counts, scoreline
+frequencies, mean goals and per-team mean statistics. Batch pass completion is
+weighted across all attempted passes; possession percentage is the mean across
+matches. JSON output supports later comparisons without parsing console text.
+Programmatic callers can pass `config=ActionConfig(...)` to `run_batch` to compare
+settings using the same seed range. These diagnostics do not establish realism
+or a home advantage; the prototype currently has no home-advantage parameter.
 
 Keep the engine independent of interfaces and persistence. Future text,
 desktop or web interfaces should consume the same match state and events.
