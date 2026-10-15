@@ -12,8 +12,13 @@ def main():
     print("First 10 passes/take-ons each, all shots, restarts and match lifecycle events:")
     shown_passes = 0
     shown_dribbles = 0
+    shown_presses = 0
     for event in match.events:
         is_pass = event.kind.startswith("pass_")
+        if event.kind.startswith("press_"):
+            shown_presses += 1
+            if shown_presses > 10:
+                continue
         if event.kind.startswith("dribble_"):
             shown_dribbles += 1
             if shown_dribbles > 10:
@@ -35,11 +40,14 @@ def main():
         challenge = (f" defender={event.defender_id}, take_on_p={event.dribble_success_probability:.3f}"
                      if event.defender_id else "")
         foul = f" fouled_player={event.fouled_player_id}" if event.fouled_player_id else ""
+        pressure = (f" pressure={event.pressure:.2f} defender={event.pressing_player_id}"
+                    if event.pressing_player_id else "")
+        opponent = f" opponent={event.opponent_player_id}" if event.opponent_player_id else ""
         coordinates = ""
         if event.location is not None:
             x, y = match.pitch.metres(event.location)
             coordinates = f" xy=({x:.1f}, {y:.1f})m"
-        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{coordinates}{target}{won}{keeper}{probability}{quality}{challenge}{foul}")
+        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{coordinates}{target}{won}{keeper}{probability}{quality}{challenge}{foul}{pressure}{opponent}")
     for team in (match.home, match.away):
         stats = match.statistics(team.id)
         print(f"{team.name}: {stats.passes_completed}/{stats.passes_attempted} passes completed; "
@@ -48,7 +56,8 @@ def main():
               f"take-ons={stats.dribbles_completed}/{stats.dribbles_attempted}; "
               f"tackles={stats.tackles_won}/{stats.tackles_attempted}; fouls={stats.fouls_committed}; "
               f"free kicks taken={stats.free_kicks_taken}; "
-              f"cards={stats.yellow_cards}Y/{stats.red_cards}R")
+              f"cards={stats.yellow_cards}Y/{stats.red_cards}R; "
+              f"presses won={stats.presses_won}/{stats.presses_attempted}")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
     print(f"Match status: {match.phase.value}")
     print("Neutral-attribute demo: values are provisional, restart handling is simplified.")

@@ -124,7 +124,8 @@ adjusted completion probability. Player attribute effects are applied next as de
 `TeamStats.expected_goals` sums scoring probabilities across all attempts,
 including saves and misses. The CLI labels this **model xG**: it describes this
 engine's assumptions, not a trained or validated real-world expected-goals model.
-The coarse grid cannot yet represent shot distance, angle or defensive pressure.
+Shot distance and angle do not yet affect conversion. Live pressure now supplements
+this context through the defensive layer below.
 
 Use `ActionConfig(context_strength=0)` to disable context or any value from 0 to 1
 to interpolate its effect. Batch comparison:
@@ -210,9 +211,9 @@ Every clean take-on is one tackle attempt for the opponent; a lost clean take-on
 opposition tackle won. These are distinct from pass interceptions. CLI examples
 show the first ten take-ons; batch JSON includes all new mean statistics.
 
-Challenges currently happen only as part of selected take-ons. Pressing before
-a pass/shot, cards, loose balls, physical contests and recovery movement
-remain deferred. Selection, success values and attribute effects are development
+Take-on challenges are now supplemented by pre-action pressing as described below.
+Loose balls and richer physical contests remain deferred.
+Selection, success values and attribute effects are development
 placeholders; no calibration is performed at this stage.
 
 ## Fouls and free-kick restarts
@@ -334,9 +335,8 @@ Formation reference points now separate DM/CM/AM longitudinally and spread
 repeated positions, such as two CBs or CMs, laterally. They rotate across both
 axes at halftime and exclude dismissed players, including emergency keeper role
 changes. The returned mapping is an independent snapshot. These are static shape
-targets, not simulated player coordinates or legal kickoff placements. They do
-not yet drive movement, pressure, marking or offside, and the earlier operating
-zone weights remain in use. Those behaviors are subsequent features.
+targets, not legal kickoff placements. The defensive layer now uses them to guide
+discrete player movement, marking and pressure. Offside remains pending.
 
 No action probabilities, attribute ranges or distributions were calibrated.
 
@@ -362,7 +362,9 @@ left and right: LW operates top-right when attacking right and bottom-left when
 attacking left.
 
 After choosing a pass destination, the resolver weights other outfield teammates
-by `1 / (1 + Manhattan distance from anchor to destination)^2`. Interceptors use
+by `1 / (1 + Manhattan distance from anchor to destination)^2` when spatial defense
+is disabled. With defense enabled, current metric distance replaces this anchor
+weight, as described below. Interceptors use
 the same rule with the defending team's opposite direction. Nearby positions are
 favoured but distant players remain eligible, allowing involvement away from an
 anchor. The carrier and both goalkeepers remain excluded from receiver/interceptor
@@ -371,11 +373,74 @@ or finishing ability.
 
 Anchors are operating preferences, not actual locations or movement constraints.
 Possession's zone remains the ball carrier's current ball location, even away
-from their anchor. Dynamic movement, marking, formation changes, tactical roles
-and positional familiarity are deferred. No probabilities or attribute ranges
+from their anchor. Discrete movement and marking are now implemented below;
+formation changes, tactical roles and positional familiarity remain deferred.
+No probabilities or attribute ranges
 were calibrated in this increment.
 
-## Match statistics and batch diagnostics
+## Defensive interactions
+
+`DefenseConfig` enables spatial defense by default. `match.player_locations(team_id)`
+returns an independent snapshot of current discrete player coordinates, distinct
+from the formation-reference targets. At each open-play action tick:
+
+1. The nearest opposition outfielder closes down the carrier, targeting the side
+   facing their own goal.
+2. Other defenders mark distinct nearby outfield opponents, targeting a position
+   on the side facing their own goal, or recover toward their formation reference
+   if no opponent is within the anchor's marking search radius.
+3. Non-carrier attackers recover toward their own formation targets. Goalkeepers
+   hold/recover their references.
+4. Movement is capped by provisional speed × action interval. The carrier remains
+   at the ball location. Pressure is then measured from the closest active outfielder.
+
+Pressure intensity is `max(0, 1 - distance / pressure_radius)`. Pass-completion
+odds and shot on-target odds receive a further factor
+`max(0.01, 1 - pressure_effect * intensity)`. Existing zone context remains a
+separate provisional influence. Shot probabilities and model xG include live
+pressure; pass/shot events record intensity and `pressing_player_id`.
+
+A defender within `challenge_radius` may press before the carrier selects an
+action. Tackling versus carrier dribbling modifies success odds. `press_won`
+transfers possession at the exact ball location and prevents the carrier's action.
+`press_evaded` lets the carrier pass or shoot; no extra take-on contest occurs in
+that action. `press_foul` uses the existing foul, card, dismissal and free-kick
+handling. Pending free kicks bypass pressing. Keeper distribution remains
+protected from pressure/pressing until complete keeper handling is implemented.
+
+Receiver/interceptor selection now uses current metric distance from the chosen
+destination zone's centre: `1 / (1 + distance/10)^2`. Take-on challengers are
+weighted by distance to the exact carrier location. Pass-flight interception
+geometry and receiver travel remain absent.
+
+Stats add clean presses attempted/won and pressing fouls. Clean presses count
+toward total tackle attempts/wins, alongside take-on contests. Pressing fouls
+count toward fouls rather than clean tackles. Press events belong to the defending
+team, identify the carrier as `opponent_player_id`, and record abilities and win
+probability.
+
+```python
+from fm95.defending import DefenseConfig
+
+match = Match(home, away, seed=95, defense_config=DefenseConfig())
+positions = match.player_locations(home.id)
+pressure = match.pressure_on_ball()
+```
+
+Development defaults: movement speed 4 m/s, pressure radius 12 m, challenge radius
+2 m, marking gap 3 m, marking search radius 20 m, press-attempt probability 0.25,
+base press-win probability 0.40 and pressure effect 0.40. All are placeholders.
+`DefenseConfig(enabled=False)` or batch `--no-defense` disables this layer for
+isolated action checks. Batch JSON includes `defense_configuration`.
+
+Positions update at action ticks, not continuously each second. Kickoffs reset
+shape. Passes/interceptions and dribbles relocate their carrier to the abstract
+ball endpoint, so the movement cap applies to off-ball movement only. There is
+no collision avoidance, acceleration, pace attribute, tactical pressing instruction,
+legal kickoff placement or offside enforcement yet. Marking is proximity-based
+pairing, not a complete defensive AI. Calibration remains deferred.
+
+## Statistics API and batches
 
 `match.statistics(team_id)` returns a fresh immutable `TeamStats` snapshot before,
 during or after a match. It provides goals, attempted/completed passes, shots,

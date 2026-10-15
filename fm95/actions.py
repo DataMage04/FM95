@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from random import Random
 from typing import TYPE_CHECKING
 
-from fm95.pitch import Direction, Third, Zone
+from fm95.pitch import Direction, Location, Pitch, Third, Zone
 from fm95.attributes import ability_multiplier
 from fm95.positions import involvement_weight
 
@@ -57,7 +57,8 @@ def adjust_probability(base: float, multiplier: float, strength: float) -> float
 
 
 def pass_completion_chance(origin: Zone, destination: Zone, direction: Direction,
-                           config: ActionConfig, *, passing: float = 0.5) -> float:
+                           config: ActionConfig, *, passing: float = 0.5,
+                           pressure: float = 0, pressure_effect: float = .4) -> float:
     progress = (destination.column - origin.column) * int(direction)
     if progress > 0:
         multiplier = 0.75
@@ -71,11 +72,13 @@ def pass_completion_chance(origin: Zone, destination: Zone, direction: Direction
     if origin.third_for(direction) == Third.ATTACKING:
         multiplier *= 0.85
     contextual = adjust_probability(config.completion_probability, multiplier, config.context_strength)
-    return adjust_probability(contextual, ability_multiplier(passing - 0.5, config.attribute_strength), 1)
+    ability = adjust_probability(contextual, ability_multiplier(passing - 0.5, config.attribute_strength), 1)
+    return adjust_probability(ability, max(.01, 1-pressure_effect*pressure), 1)
 
 
 def shot_probabilities(zone: Zone, config: ActionConfig, *, finishing: float = 0.5,
-                       shot_stopping: float = 0.5) -> tuple[float, float]:
+                       shot_stopping: float = 0.5, pressure: float = 0,
+                       pressure_effect: float = .4) -> tuple[float, float]:
     """Return on-target and conditional scoring probabilities before any draws."""
     central = zone.lane == 1
     on_target = adjust_probability(config.on_target_probability,
@@ -86,6 +89,7 @@ def shot_probabilities(zone: Zone, config: ActionConfig, *, finishing: float = 0
         ability_multiplier(finishing - 0.5, config.attribute_strength), 1)
     goal_given_target = adjust_probability(goal_given_target,
         ability_multiplier(finishing - shot_stopping, config.attribute_strength), 1)
+    on_target = adjust_probability(on_target, max(.01, 1-pressure_effect*pressure), 1)
     return on_target, goal_given_target
 
 
@@ -109,6 +113,17 @@ def dribble_success_chance(dribbling: float, tackling: float, config: ActionConf
         ability_multiplier(dribbling - tackling, config.attribute_strength), 1)
 
 
+def press_win_chance(tackling: float, dribbling: float, base: float, strength: float) -> float:
+    return adjust_probability(base, ability_multiplier(tackling-dribbling, strength), 1)
+
+
+def spatial_involvement(player, destination: Zone, direction: Direction, locations, pitch) -> float:
+    if locations is None or pitch is None:
+        return involvement_weight(player.position, destination, direction)
+    distance = pitch.distance(locations[player.id], Location.centre_of(destination))
+    return 1 / (1+distance/10) ** 2
+
+
 @dataclass(frozen=True)
 class DribbleResult:
     defender_id: str
@@ -120,12 +135,15 @@ class DribbleResult:
 
 
 def resolve_dribble(possession: "Possession", attacking: "Team | TeamInPlay", defending: "Team | TeamInPlay",
-                    direction: Direction, rng: Random, config: ActionConfig) -> DribbleResult:
+                    direction: Direction, rng: Random, config: ActionConfig, *,
+                    locations=None, pitch: Pitch | None = None) -> DribbleResult:
     """A direct contest: win advances the carrier; loss leaves ball at the challenge zone."""
     carrier = next(p for p in attacking.lineup if p.id == possession.player_id)
     defenders = [p for p in defending.lineup if not p.is_goalkeeper]
     defender = rng.choices(defenders, weights=[
-        involvement_weight(p.position, possession.zone, Direction(-int(direction)))
+        (1 / (1+pitch.distance(locations[p.id], possession.location)/10) ** 2
+         if locations is not None and pitch is not None else
+         involvement_weight(p.position, possession.zone, Direction(-int(direction))))
         for p in defenders
     ], k=1)[0]
     origin = possession.zone
@@ -153,10 +171,12 @@ class ShotResult:
 
 
 def resolve_shot(zone: Zone, rng: Random, config: ActionConfig, *, finishing: float = 0.5,
-                 shot_stopping: float = 0.5) -> ShotResult:
+                 shot_stopping: float = 0.5, pressure: float = 0,
+                 pressure_effect: float = .4) -> ShotResult:
     """On-target attempts become either goals or held saves; no rebounds yet."""
     on_target, goal_given_target = shot_probabilities(zone, config, finishing=finishing,
-                                                     shot_stopping=shot_stopping)
+                                                     shot_stopping=shot_stopping, pressure=pressure,
+                                                     pressure_effect=pressure_effect)
     if rng.random() >= on_target:
         outcome = "shot_missed"
     elif rng.random() < goal_given_target:
@@ -176,7 +196,9 @@ class PassResult:
 
 
 def resolve_pass(possession: "Possession", attacking: "Team | TeamInPlay", defending: "Team | TeamInPlay",
-                 direction: Direction, rng: Random, config: ActionConfig) -> PassResult:
+                 direction: Direction, rng: Random, config: ActionConfig, *,
+                 pressure: float = 0, pressure_effect: float = .4,
+                 locations=None, pitch: Pitch | None = None) -> PassResult:
     """Choose an outfield receiver and nearby destination, then resolve the pass.
 
     Forward destinations have weight 3; sideways and backward destinations weight 1.
@@ -195,17 +217,18 @@ def resolve_pass(possession: "Possession", attacking: "Team | TeamInPlay", defen
             weights.append(3 if dx == int(direction) else 1)
     destination = rng.choices(destinations, weights=weights, k=1)[0]
     receiver = rng.choices(receivers, weights=[
-        involvement_weight(p.position, destination, direction) for p in receivers
+        spatial_involvement(p, destination, direction, locations, pitch) for p in receivers
     ], k=1)[0]
     passer = next(p for p in attacking.lineup if p.id == possession.player_id)
     probability = pass_completion_chance(origin, destination, direction, config,
-                                         passing=passer.attributes.passing)
+                                         passing=passer.attributes.passing, pressure=pressure,
+                                         pressure_effect=pressure_effect)
     completed = rng.random() < probability
     interceptor = None
     if not completed:
         defenders = [p for p in defending.lineup if not p.is_goalkeeper]
         defending_direction = Direction(-int(direction))
         interceptor = rng.choices(defenders, weights=[
-            involvement_weight(p.position, destination, defending_direction) for p in defenders
+            spatial_involvement(p, destination, defending_direction, locations, pitch) for p in defenders
         ], k=1)[0].id
     return PassResult(receiver.id, destination, completed, interceptor, probability)

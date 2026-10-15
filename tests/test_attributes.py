@@ -80,7 +80,9 @@ class AttributeTests(unittest.TestCase):
         shot = next(e for e in match.events if e.goal_probability is not None)
         self.assertEqual((shot.shooter_finishing, shot.goalkeeper_shot_stopping), (.9, .8))
         target, conditional = shot_probabilities(Zone(2, 1), match.action_config,
-                                               finishing=.9, shot_stopping=.8)
+                                               finishing=.9, shot_stopping=.8,
+                                               pressure=shot.pressure,
+                                               pressure_effect=match.defense_config.pressure_effect)
         self.assertEqual(shot.on_target_probability, target)
         self.assertEqual(shot.goal_probability, target * conditional)
 

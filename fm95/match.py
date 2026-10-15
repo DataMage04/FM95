@@ -8,6 +8,9 @@ from fm95.actions import ActionConfig, choose_action, resolve_pass, resolve_shot
 from fm95.pitch import CENTRE, Direction, Location, Pitch, Zone
 from fm95.statistics import TeamStats, team_statistics
 from fm95.attributes import Attributes
+from fm95.actions import press_win_chance
+from fm95.defending import (DefenseConfig, Pressure, defensive_targets,
+                            measure_pressure, move_towards)
 from fm95.positions import Position, operating_zone, formation_reference_locations
 
 
@@ -93,6 +96,10 @@ class MatchEvent:
     reason: str | None = None
     location: Location | None = None
     origin_location: Location | None = None
+    pressure: float = 0
+    pressing_player_id: str | None = None
+    opponent_player_id: str | None = None
+    challenge_win_probability: float | None = None
 
 
 @dataclass(frozen=True, init=False)
@@ -145,7 +152,8 @@ class Match:
     HALF_SECONDS = 45 * 60
 
     def __init__(self, home: Team, away: Team, *, seed: int | None = None,
-                 action_config: ActionConfig | None = None, pitch: Pitch | None = None):
+                 action_config: ActionConfig | None = None, pitch: Pitch | None = None,
+                 defense_config: DefenseConfig | None = None):
         if home.id == away.id:
             raise ValueError("A team cannot play itself.")
         if {p.id for p in home.lineup} & {p.id for p in away.lineup}:
@@ -153,6 +161,7 @@ class Match:
         self.home = home
         self.away = away
         self.pitch = pitch if pitch is not None else Pitch()
+        self.defense_config = defense_config if defense_config is not None else DefenseConfig()
         self.phase = Phase.PRE_MATCH
         self.elapsed_seconds = 0
         self.home_goals = 0
@@ -168,6 +177,92 @@ class Match:
         self._yellow_cards: dict[str, int] = {}
         self._dismissed: set[str] = set()
         self._emergency_keepers: dict[str, str] = {}
+        self._player_locations: dict[str, Location] = {}
+        self._reset_player_locations()
+
+    def _reset_player_locations(self):
+        self._player_locations = {player_id: point for team in (self.home, self.away)
+                                  for player_id, point in self.formation_reference_locations(team.id).items()}
+
+    def player_locations(self, team_id: str) -> dict[str, Location]:
+        """Snapshot of discrete player positions; carrier follows abstract ball endpoints."""
+        result = {p.id: self._player_locations[p.id] for p in self.active_players(team_id)}
+        if self._possession is not None and self._possession.team_id == team_id:
+            result[self._possession.player_id] = self._possession.location
+        return result
+
+    def _sync_carrier_location(self):
+        if self._possession is not None:
+            self._player_locations[self._possession.player_id] = self._possession.location
+
+    def _update_defensive_positions(self, attacking: TeamInPlay, defending: TeamInPlay):
+        self._sync_carrier_location()
+        if not self.defense_config.enabled:
+            return
+        config = self.defense_config
+        ball = self._possession.location
+        anchors = self.formation_reference_locations(defending.id)
+        targets = defensive_targets(defending.lineup, attacking.lineup, self._player_locations,
+            anchors, self._possession.player_id, ball, self.attacking_direction(defending.id),
+            self.pitch, config)
+        targets.update(self.formation_reference_locations(attacking.id))
+        for player in attacking.lineup + defending.lineup:
+            if player.id != self._possession.player_id:
+                self._player_locations[player.id] = move_towards(self._player_locations[player.id],
+                    targets[player.id], config.movement_speed*self.action_config.interval_seconds, self.pitch)
+
+    def pressure_on_ball(self) -> Pressure:
+        if self._possession is None or self._pending_restart is not None:
+            return Pressure(None, None, 0)
+        attacking = self._active_team(self._possession.team_id)
+        if next(p for p in attacking.lineup if p.id == self._possession.player_id).is_goalkeeper:
+            return Pressure(None, None, 0)  # Held keeper distribution remains protected for now.
+        defending_id = self.away.id if attacking.id == self.home.id else self.home.id
+        return measure_pressure(self.active_players(defending_id), self._player_locations,
+                                self._possession.location, self.pitch, self.defense_config)
+
+    def _award_foul(self, possession, attacking, defending, defender_id, reason):
+        self.events.append(MatchEvent(self.elapsed_seconds, "foul", defending.id, defender_id,
+            possession.zone, fouled_player_id=possession.player_id,
+            foul_probability=self.action_config.foul_probability,
+            location=possession.location, reason=reason))
+        card = foul_card(self._rng, self.action_config)
+        if card is not None:
+            self.issue_card(defending.id, defender_id, card)
+            if self.phase == Phase.ABANDONED:
+                return
+        self._pending_restart = Restart("free_kick", attacking.id, possession.player_id,
+                                        possession.zone, possession.location)
+        self.events.append(MatchEvent(self.elapsed_seconds, "free_kick_awarded", attacking.id,
+                                      possession.player_id, possession.zone, location=possession.location))
+
+    def _try_press(self, possession, attacking, defending, pressure) -> tuple[bool, bool]:
+        """Return (carrier action stopped, clean press attempted)."""
+        config = self.defense_config
+        if (not config.enabled or pressure.defender_id is None or pressure.distance > config.challenge_radius
+                or config.press_attempt_probability == 0
+                or self._rng.random() >= config.press_attempt_probability):
+            return False, False
+        defender = next(p for p in defending.lineup if p.id == pressure.defender_id)
+        carrier = next(p for p in attacking.lineup if p.id == possession.player_id)
+        probability = press_win_chance(defender.attributes.tackling, carrier.attributes.dribbling,
+                                       config.press_win_probability, self.action_config.attribute_strength)
+        fouled = (self.action_config.foul_probability > 0
+                  and self._rng.random() < self.action_config.foul_probability)
+        won = False if fouled else self._rng.random() < probability
+        self.events.append(MatchEvent(self.elapsed_seconds,
+            "press_foul" if fouled else "press_won" if won else "press_evaded",
+            defending.id, defender.id, possession.zone, location=possession.location,
+            opponent_player_id=carrier.id, challenge_win_probability=probability,
+            carrier_dribbling=carrier.attributes.dribbling, defender_tackling=defender.attributes.tackling,
+            pressure=pressure.intensity))
+        if fouled:
+            self._award_foul(possession, attacking, defending, defender.id, "press")
+            return True, False
+        if won:
+            self._possession = Possession(defending.id, defender.id, location=possession.location)
+            return True, True
+        return False, True
 
     def discipline(self, team_id: str, player_id: str) -> Discipline:
         if player_id not in {p.id for p in self._team(team_id).lineup}:
@@ -275,6 +370,7 @@ class Match:
             raise ValueError("The ball carrier must be in the possessing team's lineup.")
         possession = Possession(team_id, player_id, zone, location=location)
         self._possession = possession
+        self._sync_carrier_location()
         self._pending_restart = None
         self.events.append(MatchEvent(self.elapsed_seconds, "possession", team_id,
                                       player_id, possession.zone, location=possession.location))
@@ -286,6 +382,8 @@ class Match:
         self._possession = Possession(team.id, taker.id, CENTRE)
         self._pending_restart = None
         self._seconds_since_action = 0
+        self._reset_player_locations()
+        self._sync_carrier_location()
         self.events.append(MatchEvent(self.elapsed_seconds, "kickoff", team.id,
                                       taker.id, CENTRE, location=self._possession.location))
 
@@ -323,6 +421,7 @@ class Match:
             self._seconds_since_action += 1
             if self._seconds_since_action >= self.action_config.interval_seconds:
                 self._play_action()
+                self._sync_carrier_location()
                 self._seconds_since_action = 0
 
     def _play_action(self):
@@ -332,6 +431,7 @@ class Match:
         attacking = self._active_team(possession.team_id)
         defending = self._active_team(self.away.id if attacking.id == self.home.id else self.home.id)
         carrier = next(p for p in attacking.lineup if p.id == possession.player_id)
+        pressure = Pressure(None, None, 0)
         if self._pending_restart is not None:
             restart = self._pending_restart
             self._pending_restart = None
@@ -340,32 +440,25 @@ class Match:
                                           location=restart.location))
             action = "pass"  # Initial free kicks are short restarts, not open-play take-ons.
         else:
+            self._update_defensive_positions(attacking, defending)
+            pressure = self.pressure_on_ball()
+            stopped, attempted = self._try_press(possession, attacking, defending, pressure)
+            if stopped:
+                return
             action = choose_action(possession.zone, self.attacking_direction(attacking.id),
-                                   self._rng, self.action_config, can_dribble=not carrier.is_goalkeeper)
+                                   self._rng, self.action_config,
+                                   can_dribble=not carrier.is_goalkeeper and not attempted)
         if action == "shot":
-            self._play_shot(possession, attacking, defending)
+            self._play_shot(possession, attacking, defending, pressure)
             return
         if action == "dribble":
             result = resolve_dribble(possession, attacking, defending,
                                      self.attacking_direction(attacking.id), self._rng,
-                                     self.action_config)
+                                     self.action_config,
+                                     locations=self._player_locations if self.defense_config.enabled else None,
+                                     pitch=self.pitch)
             if result.fouled:
-                self.events.append(MatchEvent(
-                    self.elapsed_seconds, "foul", defending.id, result.defender_id,
-                    possession.zone, fouled_player_id=possession.player_id,
-                    foul_probability=self.action_config.foul_probability,
-                    location=possession.location,
-                ))
-                card = foul_card(self._rng, self.action_config)
-                if card is not None:
-                    self.issue_card(defending.id, result.defender_id, card)
-                    if self.phase == Phase.ABANDONED:
-                        return
-                self._pending_restart = Restart("free_kick", attacking.id,
-                                                possession.player_id, possession.zone, possession.location)
-                self.events.append(MatchEvent(self.elapsed_seconds, "free_kick_awarded",
-                                              attacking.id, possession.player_id, possession.zone,
-                                              location=possession.location))
+                self._award_foul(possession, attacking, defending, result.defender_id, "take_on")
                 return
             zone = result.destination if result.completed else possession.zone
             location = possession.location.shifted_to(zone) if result.completed else possession.location
@@ -382,7 +475,10 @@ class Match:
             return
         result = resolve_pass(possession, attacking, defending,
                               self.attacking_direction(attacking.id), self._rng,
-                              self.action_config)
+                              self.action_config, pressure=pressure.intensity,
+                              pressure_effect=self.defense_config.pressure_effect,
+                              locations=self._player_locations if self.defense_config.enabled else None,
+                              pitch=self.pitch)
         # Provisional endpoint inside the chosen zone; no ball flight or player motion yet.
         location = Location((result.zone.column+.05+.90*self._rng.random())/3,
                             (result.zone.lane+.05+.90*self._rng.random())/3)
@@ -399,14 +495,17 @@ class Match:
             passer_passing=next(p.attributes.passing for p in attacking.lineup
                                 if p.id == possession.player_id),
             location=location, origin_location=possession.location,
+            pressure=pressure.intensity, pressing_player_id=pressure.defender_id,
         ))
 
-    def _play_shot(self, possession: Possession, attacking: TeamInPlay, defending: TeamInPlay):
+    def _play_shot(self, possession: Possession, attacking: TeamInPlay, defending: TeamInPlay,
+                   pressure: Pressure):
         goalkeeper = next(p for p in defending.lineup if p.is_goalkeeper)
         shooter = next(p for p in attacking.lineup if p.id == possession.player_id)
         result = resolve_shot(possession.zone, self._rng, self.action_config,
                               finishing=shooter.attributes.finishing,
-                              shot_stopping=goalkeeper.attributes.shot_stopping)
+                              shot_stopping=goalkeeper.attributes.shot_stopping,
+                              pressure=pressure.intensity, pressure_effect=self.defense_config.pressure_effect)
         outcome = result.outcome
         self.events.append(MatchEvent(
             self.elapsed_seconds, outcome, attacking.id, possession.player_id,
@@ -416,6 +515,7 @@ class Match:
             shooter_finishing=shooter.attributes.finishing,
             goalkeeper_shot_stopping=goalkeeper.attributes.shot_stopping,
             location=possession.location, origin_location=possession.location,
+            pressure=pressure.intensity, pressing_player_id=pressure.defender_id,
         ))
         if outcome == "goal":
             if attacking.id == self.home.id:

@@ -27,6 +27,9 @@ class TeamStats:
     free_kicks_taken: int
     yellow_cards: int
     red_cards: int
+    presses_attempted: int
+    presses_won: int
+    pressing_fouls: int
 
     @property
     def pass_completion_percentage(self) -> float:
@@ -51,9 +54,12 @@ def team_statistics(team_id, opponent_id, events, possession_seconds) -> TeamSta
                            and e.goal_probability is not None),
         dribbles_attempted=own["dribble_completed"] + own["dribble_tackled"],
         dribbles_completed=own["dribble_completed"],
-        tackles_attempted=opponent["dribble_completed"] + opponent["dribble_tackled"],
-        tackles_won=opponent["dribble_tackled"],
+        tackles_attempted=opponent["dribble_completed"] + opponent["dribble_tackled"]
+                          + own["press_won"] + own["press_evaded"],
+        tackles_won=opponent["dribble_tackled"] + own["press_won"],
         fouls_committed=own["foul"], fouls_suffered=opponent["foul"],
         free_kicks_awarded=own["free_kick_awarded"], free_kicks_taken=own["free_kick_taken"],
         yellow_cards=own["yellow_card"], red_cards=own["red_card"],
+        presses_attempted=own["press_won"] + own["press_evaded"],
+        presses_won=own["press_won"], pressing_fouls=own["press_foul"],
     )

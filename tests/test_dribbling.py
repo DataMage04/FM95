@@ -90,8 +90,9 @@ class DribblingTests(unittest.TestCase):
         home, away = matches[0].statistics("h"), matches[0].statistics("a")
         self.assertGreater(home.dribbles_attempted + away.dribbles_attempted, 0)
         for own, opponent in ((home, away), (away, home)):
-            self.assertEqual(own.dribbles_attempted, opponent.tackles_attempted)
-            self.assertEqual(own.dribbles_attempted-own.dribbles_completed, opponent.tackles_won)
+            self.assertEqual(own.dribbles_attempted + opponent.presses_attempted, opponent.tackles_attempted)
+            self.assertEqual(own.dribbles_attempted-own.dribbles_completed + opponent.presses_won,
+                             opponent.tackles_won)
         self.assertEqual(home.possession_seconds+away.possession_seconds, 5400)
 
     def test_validation(self):
