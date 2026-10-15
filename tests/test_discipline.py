@@ -1,3 +1,4 @@
+from fm95.boundaries import OutOfPlayConfig
 from dataclasses import replace
 import unittest
 
@@ -14,6 +15,7 @@ class DisciplineTests(unittest.TestCase):
     def make_match(self, config=None):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
                      recovery_config=RecoveryConfig(enabled=False),
+                     out_config=OutOfPlayConfig(enabled=False),
                      shot_config=ShotConfig(enabled=False),
                      action_config=config)
 

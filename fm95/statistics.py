@@ -35,6 +35,13 @@ class TeamStats:
     shots_blocked: int
     blocks: int
     parries: int
+    passes_out: int
+    throw_ins_awarded: int
+    throw_ins_taken: int
+    corners_awarded: int
+    corners_taken: int
+    goal_kicks_awarded: int
+    goal_kicks_taken: int
 
     @property
     def pass_completion_percentage(self) -> float:
@@ -48,7 +55,7 @@ def team_statistics(team_id, opponent_id, events, possession_seconds) -> TeamSta
     held = possession_seconds[team_id]
     return TeamStats(
         team_id=team_id, goals=own["goal"],
-        passes_attempted=own["pass_completed"] + own["pass_intercepted"] + own["pass_loose"],
+        passes_attempted=own["pass_completed"] + own["pass_intercepted"] + own["pass_loose"] + own["pass_out"],
         passes_completed=own["pass_completed"],
         shots=own["goal"] + own["shot_saved"] + own["shot_missed"] + own["shot_blocked"] + own["shot_parried"],
         shots_on_target=own["goal"] + own["shot_saved"] + own["shot_parried"],
@@ -71,4 +78,7 @@ def team_statistics(team_id, opponent_id, events, possession_seconds) -> TeamSta
         presses_won=own["press_won"] + own["press_dispossessed"], pressing_fouls=own["press_foul"],
         misplaced_passes=own["pass_loose"], recoveries=own["ball_recovered"],
         shots_blocked=own["shot_blocked"], blocks=opponent["shot_blocked"], parries=opponent["shot_parried"],
+        passes_out=own["pass_out"], throw_ins_awarded=own["throw_in_awarded"], throw_ins_taken=own["throw_in_taken"],
+        corners_awarded=own["corner_awarded"], corners_taken=own["corner_taken"],
+        goal_kicks_awarded=own["goal_kick_awarded"], goal_kicks_taken=own["goal_kick_taken"],
     )

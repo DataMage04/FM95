@@ -1,3 +1,4 @@
+from fm95.boundaries import OutOfPlayConfig
 import unittest
 from random import Random
 
@@ -12,6 +13,7 @@ class PassingTests(unittest.TestCase):
     def make_match(self, probability=.85, interval=6):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
                      recovery_config=RecoveryConfig(enabled=False),
+                     out_config=OutOfPlayConfig(enabled=False),
                      action_config=ActionConfig(interval, probability, shot_probability=0,
                                                 dribble_probability=0))
 

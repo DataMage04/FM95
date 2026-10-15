@@ -1,3 +1,4 @@
+from fm95.boundaries import OutOfPlayConfig
 import unittest
 
 from fm95.actions import ActionConfig
@@ -12,6 +13,7 @@ class SpatialTests(unittest.TestCase):
     def make_match(self, config=None):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
                      recovery_config=RecoveryConfig(enabled=False),
+                     out_config=OutOfPlayConfig(enabled=False),
                      action_config=config)
 
     def test_location_validation_and_zone_boundaries(self):

@@ -1,3 +1,4 @@
+from fm95.boundaries import OutOfPlayConfig
 from dataclasses import replace
 from random import Random
 import unittest
@@ -14,6 +15,7 @@ from fm95.shooting import ShotConfig, blocking_context, rebound_location
 class ShotInteractionTests(unittest.TestCase):
     def make_match(self, config, goal=0):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+            out_config=OutOfPlayConfig(enabled=False),
             action_config=ActionConfig(interval_seconds=1, shot_probability=1,
                 on_target_probability=1, goal_given_on_target_probability=goal),
             defense_config=DefenseConfig(enabled=False), shot_config=config)
@@ -113,7 +115,7 @@ class ShotInteractionTests(unittest.TestCase):
                         and e.kind in ("goal", "shot_saved", "shot_missed", "shot_blocked", "shot_parried")]
             self.assertEqual(own.shots, len(attempts))
             self.assertAlmostEqual(own.expected_goals, sum(e.goal_probability for e in attempts))
-        self.assertEqual(home.possession_seconds+away.possession_seconds+match.loose_ball_seconds, 5400)
+        self.assertEqual(home.possession_seconds+away.possession_seconds+match.loose_ball_seconds+match.dead_ball_seconds, 5400)
         summary = run_batch(1, shot_config=ShotConfig(enabled=False))
         self.assertFalse(summary["shot_configuration"]["enabled"])
         self.assertEqual(summary["team_averages"]["home"]["blocks"], 0)

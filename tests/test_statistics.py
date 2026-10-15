@@ -32,12 +32,12 @@ class StatisticsTests(unittest.TestCase):
     def test_full_match_reconciliation(self):
         match = run_match(self.make_match())
         home, away = match.statistics("h"), match.statistics("a")
-        self.assertEqual(home.possession_seconds + away.possession_seconds + match.loose_ball_seconds, 5400)
+        self.assertEqual(home.possession_seconds + away.possession_seconds + match.loose_ball_seconds + match.dead_ball_seconds, 5400)
         self.assertAlmostEqual(home.possession_percentage + away.possession_percentage, 100)
         self.assertEqual((home.goals, away.goals), (match.home_goals, match.away_goals))
         for own, other in ((home, away), (away, home)):
             self.assertEqual(own.passes_attempted - own.passes_completed,
-                             other.interceptions + own.misplaced_passes)
+                             other.interceptions + own.misplaced_passes + own.passes_out)
             self.assertEqual(own.shots_on_target, own.goals + other.saves)
             self.assertLessEqual(own.shots_on_target, own.shots)
 
@@ -66,7 +66,7 @@ class StatisticsTests(unittest.TestCase):
         self.assertAlmostEqual(summary["average_total_goals"], total_goals / 3)
         sides = summary["team_averages"]
         self.assertAlmostEqual(sum(s["possession_seconds"] for s in sides.values())
-                               + summary["average_loose_ball_seconds"], 5400)
+                               + summary["average_loose_ball_seconds"] + summary["average_dead_ball_seconds"], 5400)
         self.assertAlmostEqual(sum(s["possession_percentage"] for s in sides.values()), 100)
 
     def test_batch_empty_denominators_and_invalid_inputs(self):

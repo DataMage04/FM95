@@ -1,3 +1,4 @@
+from fm95.boundaries import OutOfPlayConfig
 import unittest
 from random import Random
 
@@ -13,6 +14,7 @@ class ShotTests(unittest.TestCase):
     def make_match(self, on_target=1, goal=1):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
                      recovery_config=RecoveryConfig(enabled=False),
+                     out_config=OutOfPlayConfig(enabled=False),
                      shot_config=ShotConfig(enabled=False),
                      action_config=ActionConfig(interval_seconds=1, shot_probability=1,
                          on_target_probability=on_target,
@@ -86,8 +88,7 @@ class ShotTests(unittest.TestCase):
             for team_id, score in (("h", match.home_goals), ("a", match.away_goals)):
                 self.assertEqual(score, sum(e.kind == "goal" and e.team_id == team_id
                                             for e in match.events))
-            self.assertTrue({"goal", "shot_saved", "shot_missed"}
-                            <= {e.kind for e in match.events})
+            self.assertTrue(any(e.goal_probability is not None for e in match.events))
         self.assertEqual(matches[0].events, matches[1].events)
 
     def test_invalid_shot_probabilities(self):

@@ -1,3 +1,4 @@
+from fm95.boundaries import OutOfPlayConfig
 from dataclasses import replace
 import unittest
 
@@ -13,6 +14,7 @@ from fm95.recovery import RecoveryConfig
 class RecoveryTests(unittest.TestCase):
     def make_match(self, config=None, recovery=None, defense=None):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+            out_config=OutOfPlayConfig(enabled=False),
             action_config=config or ActionConfig(interval_seconds=1, shot_probability=0,
                 dribble_probability=0, completion_probability=0, foul_probability=0),
             recovery_config=recovery or RecoveryConfig(misplaced_pass_probability=1),
@@ -127,16 +129,16 @@ class RecoveryTests(unittest.TestCase):
         match = matches[0]
         home, away = match.statistics("h"), match.statistics("a")
         self.assertGreater(match.loose_ball_seconds, 0)
-        self.assertEqual(home.possession_seconds+away.possession_seconds+match.loose_ball_seconds, 5400)
+        self.assertEqual(home.possession_seconds+away.possession_seconds+match.loose_ball_seconds+match.dead_ball_seconds, 5400)
         self.assertAlmostEqual(home.possession_percentage+away.possession_percentage, 100)
         for own, other in ((home, away), (away, home)):
             self.assertEqual(own.passes_attempted-own.passes_completed,
-                             other.interceptions+own.misplaced_passes)
+                             other.interceptions+own.misplaced_passes+own.passes_out)
             self.assertEqual(own.recoveries, sum(e.kind == "ball_recovered" and e.team_id == own.team_id
                                                 for e in match.events))
         summary = run_batch(1)
         self.assertAlmostEqual(sum(s["possession_seconds"] for s in summary["team_averages"].values())
-                               + summary["average_loose_ball_seconds"], 5400)
+                               + summary["average_loose_ball_seconds"] + summary["average_dead_ball_seconds"], 5400)
 
     def test_disabled_outcomes_and_configuration_validation(self):
         match = self.make_match(recovery=RecoveryConfig(enabled=False))

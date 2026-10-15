@@ -1,3 +1,4 @@
+from fm95.boundaries import OutOfPlayConfig
 from dataclasses import replace
 from random import Random
 import unittest
@@ -20,6 +21,7 @@ class DribblingTests(unittest.TestCase):
         for success in (0, 1):
             match = Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
                           recovery_config=RecoveryConfig(enabled=False),
+                     out_config=OutOfPlayConfig(enabled=False),
                           action_config=self.config(success))
             match.start()
             original = match.possession
@@ -76,6 +78,7 @@ class DribblingTests(unittest.TestCase):
 
     def test_goalkeeper_distributes_and_action_selection_can_disable_dribbles(self):
         match = Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+                      recovery_config=RecoveryConfig(enabled=False), out_config=OutOfPlayConfig(enabled=False),
                       action_config=self.config())
         match.start()
         match.set_possession("h", "h-1", Zone(0, 1))
@@ -95,7 +98,7 @@ class DribblingTests(unittest.TestCase):
             self.assertEqual(own.dribbles_attempted + opponent.presses_attempted, opponent.tackles_attempted)
             self.assertEqual(own.dribbles_attempted-own.dribbles_completed + opponent.presses_won,
                              opponent.tackles_won)
-        self.assertEqual(home.possession_seconds+away.possession_seconds+matches[0].loose_ball_seconds, 5400)
+        self.assertEqual(home.possession_seconds+away.possession_seconds+matches[0].loose_ball_seconds+matches[0].dead_ball_seconds, 5400)
 
     def test_validation(self):
         for name in ("dribbling", "tackling"):

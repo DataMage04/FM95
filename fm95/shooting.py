@@ -54,11 +54,17 @@ def blocking_context(defenders, locations, origin: Location, direction: Directio
     return player_id, config.block_probability*(1-distance/config.block_radius)
 
 
-def rebound_location(origin: Location, pitch: Pitch, rng, distance: float) -> Location:
-    """Instant in-play deflection, not a velocity/trajectory model."""
+def rebound_endpoint(origin: Location, pitch: Pitch, rng, distance: float) -> tuple[float, float]:
     if distance == 0:
-        return origin
+        return origin.x, origin.y
     angle = rng.random()*2*pi
     radius = distance*(.25+.75*rng.random())
-    return Location(max(1e-6, min(1-1e-6, origin.x+radius*cos(angle)/pitch.length)),
-                    max(1e-6, min(1-1e-6, origin.y+radius*sin(angle)/pitch.width)))
+    return origin.x+radius*cos(angle)/pitch.length, origin.y+radius*sin(angle)/pitch.width
+
+
+def rebound_location(origin: Location, pitch: Pitch, rng, distance: float) -> Location:
+    """Legacy in-play endpoint when boundary interactions are disabled."""
+    if distance == 0:
+        return origin
+    x, y = rebound_endpoint(origin, pitch, rng, distance)
+    return Location(max(1e-6, min(1-1e-6, x)), max(1e-6, min(1-1e-6, y)))

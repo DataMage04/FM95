@@ -64,8 +64,10 @@ def main():
               f"free kicks taken={stats.free_kicks_taken}; "
               f"cards={stats.yellow_cards}Y/{stats.red_cards}R; "
               f"presses won={stats.presses_won}/{stats.presses_attempted}; recoveries={stats.recoveries}; "
-              f"blocks={stats.blocks}; parries={stats.parries}")
+              f"blocks={stats.blocks}; parries={stats.parries}; "
+              f"throw-ins={stats.throw_ins_taken}; corners={stats.corners_taken}")
     print(f"Uncontrolled ball time: {match.loose_ball_seconds} s; possession shares use controlled time.")
+    print(f"Out-of-play restart time: {match.dead_ball_seconds} s")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
     print(f"Match status: {match.phase.value}")
     print("Neutral-attribute demo: values are provisional, restart handling is simplified.")

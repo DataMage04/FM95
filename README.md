@@ -59,7 +59,7 @@ have weight 1 each. Teams use their current attacking direction.
 Pass completion has a provisional base probability of 0.85, modified by context below.
 Completed passes transfer ownership to the receiver. Failed passes can now be
 intercepted or misplaced into an uncontrolled-ball state, as described below.
-Out-of-play passes remain pending. Assigned positions
+Failed passes can also leave play for a restart, as described below. Assigned positions
 weight involvement through coarse operating zones rather than tracked coordinates.
 These simplifications establish state transitions; they are not calibrated football
 statistics. Demo players have neutral attributes and goalkeepers are excluded as receivers
@@ -93,13 +93,14 @@ Each attempt emits exactly one outcome: `goal`, `shot_saved`, `shot_missed`,
 The event identifies the shooting team, shooter, shot zone and defending keeper
 via `goalkeeper_id`. A goal increments the score and immediately emits a kickoff
 for the conceding team at centre. A held save gives the keeper possession in the
-centre lane of their defensive column. A miss emits an immediate `goal_kick`
-event and gives the keeper possession at that same coarse location. The keeper
+centre lane of their defensive column. With out-of-play enabled, a miss now awards
+a pending goal kick. In the legacy isolation mode it emits an immediate `goal_kick`
+event and gives the keeper possession. The keeper
 can distribute via a pass on the next action.
 
 Shot restarts currently take no simulated time; shot events and resulting restarts
 share a timestamp. Blocks and parried rebounds now use loose-ball recovery below.
-Corners, offside, restart delays and added
+Throw-ins, corners and pending goal kicks are implemented below; offside and added
 time are deferred. Whistles still prevent any action at exactly 45 or 90 minutes.
 The CLI now includes all shots and restarts, with per-team attempts, shots on
 target (goals plus saves), goals and passing totals derived from the event log.
@@ -144,7 +145,7 @@ settings change the seeded results from earlier engine versions.
 
 ### Planned work
 
-1. Add out-of-play outcomes and richer restarts, tactical roles and tactics.
+1. Expand set pieces, penalty decisions, tactical roles and tactics.
 2. Complete intended match-engine features and verify their behavior.
 3. Calibrate attribute ranges, distributions and probability effects together at the
    end of Milestone 1. Until then, batch runs diagnose behavior rather than tune averages.
@@ -454,7 +455,7 @@ produce an immediate pass or shot in the same action.
 
 `RecoveryConfig` enables these provisional outcomes by default:
 
-- A failed pass has conditional `misplaced_pass_probability=0.35` of becoming
+- A failed pass remaining in play has conditional `misplaced_pass_probability=0.35` of becoming
   `pass_loose`, rather than an interception. Its endpoint stays in the selected
   destination zone, and no interceptor is credited.
 - A clean won tackle/press has conditional `tackle_loose_probability=0.25` of
@@ -483,8 +484,8 @@ that dislodge the ball still count as won challenges, but recovery is credited
 separately. `presses_won` therefore includes direct wins and dislodgements.
 
 `match.loose_ball_seconds` credits each interval starting without a controlling
-team to uncontrolled time. Controlled seconds plus uncontrolled seconds equal
-elapsed play; at full time they total 5400. Team possession percentages continue
+team to uncontrolled time. Controlled, uncontrolled and out-of-play dead-ball
+seconds total elapsed play; at full time they total 5400. Team possession percentages continue
 to use controlled time only, so they sum to 100% once any controlled time exists.
 They are zero if neither team has controlled the ball. Batch output adds
 `average_loose_ball_seconds` and records the recovery configuration.
@@ -501,8 +502,8 @@ match.set_loose_ball(Location(.55, .4))  # Explicit development scenario.
 `RecoveryConfig(enabled=False)` or batch `--no-loose-balls` disables automatic
 pass/tackle loose outcomes for isolated checks. A manually created loose ball still uses
 recovery logic. Explicit possession changes, kickoffs, period whistles and
-abandonment clear loose state. There is no ball velocity, bouncing, out-of-play
-trajectory or recovery-specific attribute yet. Shot blocks/parries now use the
+abandonment clear loose state. There is no ball velocity, bouncing or
+recovery-specific attribute yet. Shot blocks/parries now use the
 same recovery mechanism, as described below. All
 values and attribute ranges remain provisional; calibration is deferred.
 
@@ -525,8 +526,8 @@ the original attempt; it changes whether the save retains control.
 A `shot_blocked` creates a loose rebound around the blocking defender's current
 position. A `shot_parried` creates one around the keeper's current position.
 Displacement uses a sampled direction and provisional maximum
-`rebound_distance=8` m. Positive-distance endpoints are clamped inside the field
-until out-of-play deflections are implemented. Zero distance preserves the exact
+`rebound_distance=8` m. Endpoints can now leave play for a restart. If out-of-play
+is disabled, positive-distance endpoints are clamped inside the field. Zero distance preserves the exact
 contact point. There is no velocity, height, spin or flight delay. A later action
 handles recovery; neither outcome awards immediate control or a goal kick.
 
@@ -555,11 +556,77 @@ match = Match(home, away, seed=95, shot_config=ShotConfig())
 miss/goal resolution for isolation. This setting is independent of `RecoveryConfig`:
 disabling pass/tackle loose outcomes does not disable parried/blocked rebounds.
 Batch JSON includes `shot_configuration`; CLI summaries include blocks/parries.
-Dedicated blocking/handling attributes, corners, out-of-play deflections, physical
+Dedicated blocking/handling attributes, crossed corner deliveries, physical
 trajectories and rebound-specific shot selection remain deferred. No probabilities,
 attribute ranges or effect sizes were calibrated.
 
-## Statistics API and batch commands
+## Out-of-play and boundary restarts
+
+`OutOfPlayConfig` enables spatial exits by default. `first_exit(origin, x, y)`
+accepts a possibly out-of-range normalized endpoint and returns the first segment
+crossing as a `BoundaryExit`. Points still on the line are treated as in play;
+exact corner ties use touchline precedence as an explicit model convention.
+This uses a point-ball abstraction, not full-ball-radius or height geometry.
+
+For resolved non-goal exits, the boundary and last touch determine the restart:
+
+- A touchline exit awards the other team a throw-in at the exit point.
+- A goal-line exit last touched by that end's defending team awards the opponents
+  a corner at the nearer corner.
+- A goal-line exit last touched by the attacking team awards the defending team
+  a goal kick, using a goalkeeper point within the goal area.
+
+The defending end is derived from the current half's attacking directions.
+Rules referenced: [IFAB Law 15](https://www.theifab.com/laws/latest/the-throw-in/),
+[Law 16](https://www.theifab.com/laws/latest/the-goal-kick/) and
+[Law 17](https://www.theifab.com/laws/latest/the-corner-kick/).
+
+A failed pass has provisional conditional `failed_pass_out_probability=0.25`
+of exiting before the remaining interception/loose-ball choice. Its sampled exit
+direction favours boundaries near the intended endpoint. `pass_out` records the
+passer, receiver, origin, actual exit point and `intended_zone`; completion
+probability refers to the intended zone rather than the boundary cell.
+
+Shot blocks/parries now use unclamped deflection endpoints. If they exit, last
+touch is the blocker/keeper rather than the shooter. Missed shots award a goal
+kick at the attacked end. Already-resolved goals retain their existing score and
+kickoff path. Pass goals, own goals, direct goals from restarts and determining
+whether a non-scoring deflection crosses the goal mouth remain outside this
+increment; the exit API applies only to outcomes already classified as non-goals.
+
+`ball_out` records the last toucher and boundary. A following `throw_in_awarded`,
+`corner_awarded` or `goal_kick_awarded` creates an immutable pending restart,
+clearing controlled possession and loose state. `ball_location` exposes the
+restart spot while the ball is dead. The nearest active outfielder takes a throw
+or corner; the active keeper takes a goal kick. At the next action the engine
+emits the corresponding `_taken` event and resolves a short pass. This bypasses
+open-play pressing, and the taker cannot receive their own restart pass. Corners
+currently use short passes, not crosses or headers. Dismissed takers are replaced.
+
+`match.dead_ball_seconds` tracks intervals awaiting these out-of-play restarts.
+Controlled time + loose-ball time + out-of-play dead-ball time equals elapsed
+play. Existing free-kick waiting still uses the earlier awarded-team possession
+convention, so this is not yet a complete stoppage-time model. Whistles clear
+pending restarts and do not extend the period; added time remains unfinished.
+Stats distinguish pass-outs and awarded/taken throws, corners and goal kicks.
+Failed passes reconcile as completed attempts' remainder: interceptions + misplaced
+passes + passes out. Batch JSON adds `out_of_play_configuration` and
+`average_dead_ball_seconds`.
+
+```python
+from fm95.boundaries import Boundary, BoundaryExit, OutOfPlayConfig
+from fm95.pitch import Location
+
+match.award_out_of_play(BoundaryExit(Boundary.TOP, Location(.4, 1)), "home", "home-7")
+```
+
+`OutOfPlayConfig(enabled=False)` or batch `--no-out-of-play` disables automatic
+spatial exits, restoring legacy held goal-kick possession and clamped rebounds.
+Explicit development exit awards still work. Legal player placement, throw-in
+technique, restart countdowns, direct deliveries, full ball geometry, and added
+time are deferred. Probabilities and attribute ranges have not been calibrated.
+
+## Statistics API and batch execution
 
 `match.statistics(team_id)` returns a fresh immutable `TeamStats` snapshot before,
 during or after a match. It provides goals, attempted/completed passes, shots,
@@ -570,7 +637,7 @@ interception for the defending team.
 
 Each clock step credits one second to the team holding possession at the start
 of that step, before resolving the action or whistle at its end. Halftime accrues
-no time. Controlled possession seconds plus `match.loose_ball_seconds` total 5400
+no time. Controlled seconds plus loose-ball seconds and `match.dead_ball_seconds` total 5400
 for a complete prototype match. Percentages use controlled time, with zero before
 any control. Instant restarts consume no extra time. This convention will need
 refinement when ball flight and stoppage durations are introduced.

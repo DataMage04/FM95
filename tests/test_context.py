@@ -59,7 +59,7 @@ class ContextTests(unittest.TestCase):
                 direction = (Direction.RIGHT if (event.team_id == "h") == (event.elapsed_seconds < 2700)
                              else Direction.LEFT)
                 self.assertEqual(event.completion_probability,
-                    pass_completion_chance(event.origin, event.zone, direction, match.action_config,
+                    pass_completion_chance(event.origin, event.intended_zone or event.zone, direction, match.action_config,
                         pressure=event.pressure, pressure_effect=match.defense_config.pressure_effect))
         for team in ("h", "a"):
             shots = [e for e in match.events if e.team_id == team
