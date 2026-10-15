@@ -2,6 +2,7 @@ from dataclasses import replace
 import unittest
 
 from fm95.actions import ActionConfig
+from fm95.recovery import RecoveryConfig
 from fm95.batch import run_match
 from fm95.demo import demo_team
 from fm95.match import Match, Phase
@@ -11,6 +12,7 @@ from fm95.pitch import CENTRE
 class FoulTests(unittest.TestCase):
     def make_match(self):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+            recovery_config=RecoveryConfig(enabled=False),
             action_config=ActionConfig(interval_seconds=1, shot_probability=0,
                 dribble_probability=1, foul_probability=1, completion_probability=1,
                 straight_red_probability=0, yellow_card_probability=0))
@@ -93,7 +95,7 @@ class FoulTests(unittest.TestCase):
             self.assertEqual(own.fouls_suffered, opponent.fouls_committed)
             self.assertEqual(own.free_kicks_awarded, own.fouls_suffered)
             self.assertLessEqual(own.free_kicks_taken, own.free_kicks_awarded)
-        self.assertEqual(home.possession_seconds+away.possession_seconds, 5400)
+        self.assertEqual(home.possession_seconds+away.possession_seconds+match.loose_ball_seconds, 5400)
 
     def test_probability_validation(self):
         for probability in (-1, 1.1, float("nan")):

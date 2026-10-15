@@ -38,7 +38,8 @@ when the second half starts. `zone.third_for(match.attacking_direction(team_id))
 converts a fixed location into that team's defensive, middle or attacking third.
 
 `match.possession` contains the team ID, carrier ID and zone together, or is
-`None` before kickoff, at halftime and at full time. Kickoff assigns the ball
+`None` before kickoff, at halftime, at full time, or while a loose ball is uncontrolled.
+Kickoff assigns the ball
 at centre to the first striker, falling back to the first outfield player.
 `set_possession(team_id, player_id, zone)` validates and records a resolved
 ownership/location change. It will be used by future football actions; it does
@@ -56,9 +57,9 @@ Legal forward destinations have weight 3; same-zone, lateral and backward choice
 have weight 1 each. Teams use their current attacking direction.
 
 Pass completion has a provisional base probability of 0.85, modified by context below.
-Completed passes transfer ownership to the receiver. Every failed pass is currently
-an interception by a randomly selected opposition outfield player at the intended
-destination. There are no loose balls or out-of-play passes yet. Assigned positions
+Completed passes transfer ownership to the receiver. Failed passes can now be
+intercepted or misplaced into an uncontrolled-ball state, as described below.
+Out-of-play passes remain pending. Assigned positions
 weight involvement through coarse operating zones rather than tracked coordinates.
 These simplifications establish state transitions; they are not calibrated football
 statistics. Demo players have neutral attributes and goalkeepers are excluded as receivers
@@ -141,7 +142,7 @@ settings change the seeded results from earlier engine versions.
 
 ### Planned work
 
-1. Expand defensive interactions, tactical roles, tactics and restarts.
+1. Expand ball outcomes (blocks/rebounds and out-of-play), tactical roles, tactics and restarts.
 2. Complete intended match-engine features and verify their behavior.
 3. Calibrate attribute ranges, distributions and probability effects together at the
    end of Milestone 1. Until then, batch runs diagnose behavior rather than tune averages.
@@ -403,7 +404,8 @@ pressure; pass/shot events record intensity and `pressing_player_id`.
 A defender within `challenge_radius` may press before the carrier selects an
 action. Tackling versus carrier dribbling modifies success odds. `press_won`
 transfers possession at the exact ball location and prevents the carrier's action.
-`press_evaded` lets the carrier pass or shoot; no extra take-on contest occurs in
+`press_dispossessed` wins the challenge but leaves control unresolved, as described
+below. `press_evaded` lets the carrier pass or shoot; no extra take-on contest occurs in
 that action. `press_foul` uses the existing foul, card, dismissal and free-kick
 handling. Pending free kicks bypass pressing. Keeper distribution remains
 protected from pressure/pressing until complete keeper handling is implemented.
@@ -440,7 +442,68 @@ no collision avoidance, acceleration, pace attribute, tactical pressing instruct
 legal kickoff placement or offside enforcement yet. Marking is proximity-based
 pairing, not a complete defensive AI. Calibration remains deferred.
 
-## Statistics API and batches
+## Loose balls and recovery contests
+
+`match.loose_ball` stores an immutable uncontrolled-ball record: exact location,
+last controlling team/player and reason. While it exists, `match.possession` is
+`None` but `match.ball_location` remains available. Only one of controlled possession
+or a loose ball can exist. A recovery consumes a later action; it cannot also
+produce an immediate pass or shot in the same action.
+
+`RecoveryConfig` enables these provisional outcomes by default:
+
+- A failed pass has conditional `misplaced_pass_probability=0.35` of becoming
+  `pass_loose`, rather than an interception. Its endpoint stays in the selected
+  destination zone, and no interceptor is credited.
+- A clean won tackle/press has conditional `tackle_loose_probability=0.25` of
+  dislodging the ball rather than giving the defender control. This produces
+  `dribble_dispossessed` or `press_dispossessed`, then `ball_loose` at the challenge
+  location. Winning the challenge does not guarantee winning the recovery.
+
+On a recovery action, the nearest eligible player from each team chases the ball
+with provisional `movement_speed=4` m/s, capped by speed × action interval.
+Outfielders are eligible everywhere; a keeper is eligible only within their own
+penalty area. Dismissed players are excluded. Other players hold their positions
+during this recovery action. Only players within `control_radius=1.5` m after
+movement can gain possession. With nobody in reach, `ball_unrecovered` leaves
+the ball uncontrolled for another action.
+
+Eligible players contest control with weights proportional to
+`exp(2 * attribute_strength * (dribbling - 0.5)) / (1 + initial_distance_metres)`.
+Initial proximity rewards earlier arrival and dribbling is the current control
+proxy. The chosen player gains possession at the exact ball location, and
+`ball_recovered` records the team, player and eligible-candidate count. This is
+an abstract race/control contest, not continuous arrival-time or collision physics.
+
+Team stats add `misplaced_passes` and `recoveries`. Failed-pass totals reconcile as
+opposition interceptions plus own misplaced passes. Clean tackles and presses
+that dislodge the ball still count as won challenges, but recovery is credited
+separately. `presses_won` therefore includes direct wins and dislodgements.
+
+`match.loose_ball_seconds` credits each interval starting without a controlling
+team to uncontrolled time. Controlled seconds plus uncontrolled seconds equal
+elapsed play; at full time they total 5400. Team possession percentages continue
+to use controlled time only, so they sum to 100% once any controlled time exists.
+They are zero if neither team has controlled the ball. Batch output adds
+`average_loose_ball_seconds` and records the recovery configuration.
+
+```python
+from fm95.recovery import RecoveryConfig
+from fm95.pitch import Location
+
+match = Match(home, away, seed=95, recovery_config=RecoveryConfig())
+match.start()
+match.set_loose_ball(Location(.55, .4))  # Explicit development scenario.
+```
+
+`RecoveryConfig(enabled=False)` or batch `--no-loose-balls` disables automatic
+loose outcomes for isolated checks. A manually created loose ball still uses
+recovery logic. Explicit possession changes, kickoffs, period whistles and
+abandonment clear loose state. There is no ball velocity, bouncing, out-of-play
+trajectory, shot block/parry/rebound or recovery-specific attribute yet. All
+values and attribute ranges remain provisional; calibration is deferred.
+
+## Statistics API and batch usage
 
 `match.statistics(team_id)` returns a fresh immutable `TeamStats` snapshot before,
 during or after a match. It provides goals, attempted/completed passes, shots,
@@ -451,10 +514,10 @@ interception for the defending team.
 
 Each clock step credits one second to the team holding possession at the start
 of that step, before resolving the action or whistle at its end. Halftime accrues
-no time. Possession seconds therefore total 5400 for a complete prototype match.
-Percentages use elapsed credited time, with zero before any play. Instant restarts
-consume no extra time. This convention will need refinement when loose balls,
-ball flight and stoppage durations are introduced.
+no time. Controlled possession seconds plus `match.loose_ball_seconds` total 5400
+for a complete prototype match. Percentages use controlled time, with zero before
+any control. Instant restarts consume no extra time. This convention will need
+refinement when ball flight and stoppage durations are introduced.
 
 Run a repeatable diagnostic batch using synthetic equal-ability teams:
 

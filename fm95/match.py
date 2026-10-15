@@ -11,6 +11,8 @@ from fm95.attributes import Attributes
 from fm95.actions import press_win_chance
 from fm95.defending import (DefenseConfig, Pressure, defensive_targets,
                             measure_pressure, move_towards)
+from fm95.recovery import LooseBall, RecoveryConfig
+from fm95.attributes import ability_multiplier
 from fm95.positions import Position, operating_zone, formation_reference_locations
 
 
@@ -100,6 +102,7 @@ class MatchEvent:
     pressing_player_id: str | None = None
     opponent_player_id: str | None = None
     challenge_win_probability: float | None = None
+    recovery_candidates: int | None = None
 
 
 @dataclass(frozen=True, init=False)
@@ -153,7 +156,8 @@ class Match:
 
     def __init__(self, home: Team, away: Team, *, seed: int | None = None,
                  action_config: ActionConfig | None = None, pitch: Pitch | None = None,
-                 defense_config: DefenseConfig | None = None):
+                 defense_config: DefenseConfig | None = None,
+                 recovery_config: RecoveryConfig | None = None):
         if home.id == away.id:
             raise ValueError("A team cannot play itself.")
         if {p.id for p in home.lineup} & {p.id for p in away.lineup}:
@@ -162,12 +166,15 @@ class Match:
         self.away = away
         self.pitch = pitch if pitch is not None else Pitch()
         self.defense_config = defense_config if defense_config is not None else DefenseConfig()
+        self.recovery_config = recovery_config if recovery_config is not None else RecoveryConfig()
         self.phase = Phase.PRE_MATCH
         self.elapsed_seconds = 0
         self.home_goals = 0
         self.away_goals = 0
         self.events: list[MatchEvent] = []
         self._possession: Possession | None = None
+        self._loose_ball: LooseBall | None = None
+        self._loose_ball_seconds = 0
         self._ends_switched = False
         self._rng = Random(seed)
         self.action_config = action_config if action_config is not None else ActionConfig()
@@ -179,6 +186,65 @@ class Match:
         self._emergency_keepers: dict[str, str] = {}
         self._player_locations: dict[str, Location] = {}
         self._reset_player_locations()
+
+    @property
+    def loose_ball(self) -> LooseBall | None:
+        return self._loose_ball
+
+    @property
+    def loose_ball_seconds(self) -> int:
+        return self._loose_ball_seconds
+
+    def set_loose_ball(self, location: Location, *, reason: str = "development_override"):
+        """Release control at an exact location; also supports deterministic scenarios."""
+        if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
+            raise RuntimeError("A loose ball can be created only during play.")
+        if not isinstance(location, Location):
+            raise ValueError("Loose ball needs a valid Location.")
+        old = self._possession
+        self._sync_carrier_location()
+        self._loose_ball = LooseBall(location, old.team_id if old else None,
+                                     old.player_id if old else None, reason)
+        self._possession = None
+        self._pending_restart = None
+        self.events.append(MatchEvent(self.elapsed_seconds, "ball_loose",
+            self._loose_ball.last_team_id, self._loose_ball.last_player_id,
+            location.zone, location=location, reason=reason))
+
+    def _recover_loose_ball(self):
+        loose, config = self._loose_ball, self.recovery_config
+        entrants = []
+        before = {}
+        for team in (self.home, self.away):
+            players = [p for p in self.active_players(team.id) if not p.is_goalkeeper
+                       or self.pitch.in_penalty_area(loose.location, self.attacking_direction(team.id))]
+            for player in players:
+                before[player.id] = self.pitch.distance(self._player_locations[player.id], loose.location)
+                entrants.append((team.id, player))
+            chaser = min(players, key=lambda p: before[p.id])
+            self._player_locations[chaser.id] = move_towards(self._player_locations[chaser.id],
+                loose.location, config.movement_speed*self.action_config.interval_seconds, self.pitch)
+        eligible = [(team_id, player) for team_id, player in entrants
+                    if self.pitch.distance(self._player_locations[player.id], loose.location)
+                    <= config.control_radius + 1e-9]
+        if not eligible:
+            self.events.append(MatchEvent(self.elapsed_seconds, "ball_unrecovered", zone=loose.location.zone,
+                                          location=loose.location, recovery_candidates=0))
+            return
+        # Initial proximity rewards earlier arrival; dribbling represents control in this prototype.
+        winner_team, winner = self._rng.choices(eligible, weights=[
+            ability_multiplier(player.attributes.dribbling-.5, self.action_config.attribute_strength)
+            / (1+before[player.id]) for _, player in eligible], k=1)[0]
+        self._possession = Possession(winner_team, winner.id, location=loose.location)
+        self._loose_ball = None
+        self.events.append(MatchEvent(self.elapsed_seconds, "ball_recovered", winner_team, winner.id,
+            loose.location.zone, location=loose.location, reason=loose.reason,
+            recovery_candidates=len(eligible)))
+
+    def _tackle_knocks_loose(self) -> bool:
+        config = self.recovery_config
+        return (config.enabled and config.tackle_loose_probability > 0
+                and self._rng.random() < config.tackle_loose_probability)
 
     def _reset_player_locations(self):
         self._player_locations = {player_id: point for team in (self.home, self.away)
@@ -250,8 +316,9 @@ class Match:
         fouled = (self.action_config.foul_probability > 0
                   and self._rng.random() < self.action_config.foul_probability)
         won = False if fouled else self._rng.random() < probability
+        knocked_loose = won and self._tackle_knocks_loose()
         self.events.append(MatchEvent(self.elapsed_seconds,
-            "press_foul" if fouled else "press_won" if won else "press_evaded",
+            "press_foul" if fouled else "press_dispossessed" if knocked_loose else "press_won" if won else "press_evaded",
             defending.id, defender.id, possession.zone, location=possession.location,
             opponent_player_id=carrier.id, challenge_win_probability=probability,
             carrier_dribbling=carrier.attributes.dribbling, defender_tackling=defender.attributes.tackling,
@@ -260,6 +327,9 @@ class Match:
             self._award_foul(possession, attacking, defending, defender.id, "press")
             return True, False
         if won:
+            if knocked_loose:
+                self.set_loose_ball(possession.location, reason="press_dispossession")
+                return True, True
             self._possession = Possession(defending.id, defender.id, location=possession.location)
             return True, True
         return False, True
@@ -299,6 +369,7 @@ class Match:
         if len(self.active_players(team_id)) < 7:
             self.phase = Phase.ABANDONED
             self._possession = None
+            self._loose_ball = None
             self._pending_restart = None
             self.events.append(MatchEvent(self.elapsed_seconds, "match_abandoned", team_id,
                                           reason="fewer_than_seven_players"))
@@ -348,7 +419,8 @@ class Match:
 
     @property
     def ball_location(self) -> Location | None:
-        return self._possession.location if self._possession is not None else None
+        return (self._possession.location if self._possession is not None else
+                self._loose_ball.location if self._loose_ball is not None else None)
 
     def _team(self, team_id: str) -> Team:
         for team in (self.home, self.away):
@@ -370,6 +442,7 @@ class Match:
             raise ValueError("The ball carrier must be in the possessing team's lineup.")
         possession = Possession(team_id, player_id, zone, location=location)
         self._possession = possession
+        self._loose_ball = None
         self._sync_carrier_location()
         self._pending_restart = None
         self.events.append(MatchEvent(self.elapsed_seconds, "possession", team_id,
@@ -380,6 +453,7 @@ class Match:
         taker = next((player for player in team.lineup if player.position == Position.ST),
                      next(player for player in team.lineup if not player.is_goalkeeper))
         self._possession = Possession(team.id, taker.id, CENTRE)
+        self._loose_ball = None
         self._pending_restart = None
         self._seconds_since_action = 0
         self._reset_player_locations()
@@ -406,15 +480,19 @@ class Match:
         # Credit [t, t+1) to the owner before actions/whistles at t+1.
         if self._possession is not None:
             self._possession_seconds[self._possession.team_id] += 1
+        elif self._loose_ball is not None:
+            self._loose_ball_seconds += 1
         self.elapsed_seconds += 1
         if self.phase == Phase.FIRST_HALF and self.elapsed_seconds == self.HALF_SECONDS:
             self.phase = Phase.HALF_TIME
             self._possession = None
+            self._loose_ball = None
             self._pending_restart = None
             self.events.append(MatchEvent(self.elapsed_seconds, "half_time"))
         elif self.elapsed_seconds == 2 * self.HALF_SECONDS:
             self.phase = Phase.FULL_TIME
             self._possession = None
+            self._loose_ball = None
             self._pending_restart = None
             self.events.append(MatchEvent(self.elapsed_seconds, "full_time"))
         else:
@@ -425,6 +503,9 @@ class Match:
                 self._seconds_since_action = 0
 
     def _play_action(self):
+        if self._loose_ball is not None:
+            self._recover_loose_ball()
+            return
         possession = self._possession
         if possession is None:
             raise RuntimeError("An action requires active possession.")
@@ -460,6 +541,14 @@ class Match:
             if result.fouled:
                 self._award_foul(possession, attacking, defending, result.defender_id, "take_on")
                 return
+            if not result.completed and self._tackle_knocks_loose():
+                self.events.append(MatchEvent(self.elapsed_seconds, "dribble_dispossessed", attacking.id,
+                    possession.player_id, possession.zone, origin=possession.zone,
+                    defender_id=result.defender_id, dribble_success_probability=result.success_probability,
+                    carrier_dribbling=carrier.attributes.dribbling, defender_tackling=result.defender_tackling,
+                    location=possession.location, origin_location=possession.location))
+                self.set_loose_ball(possession.location, reason="take_on_dispossession")
+                return
             zone = result.destination if result.completed else possession.zone
             location = possession.location.shifted_to(zone) if result.completed else possession.location
             self._possession = (Possession(attacking.id, possession.player_id, location=location)
@@ -482,21 +571,26 @@ class Match:
         # Provisional endpoint inside the chosen zone; no ball flight or player motion yet.
         location = Location((result.zone.column+.05+.90*self._rng.random())/3,
                             (result.zone.lane+.05+.90*self._rng.random())/3)
+        misplaced = (not result.completed and self.recovery_config.enabled
+            and self.recovery_config.misplaced_pass_probability > 0
+            and self._rng.random() < self.recovery_config.misplaced_pass_probability)
         if result.completed:
             self._possession = Possession(attacking.id, result.receiver_id, location=location)
-        else:
+        elif not misplaced:
             self._possession = Possession(defending.id, result.interceptor_id, location=location)
         # One action event records the passer, intended receiver, destination and outcome.
         self.events.append(MatchEvent(
-            self.elapsed_seconds, "pass_completed" if result.completed else "pass_intercepted",
+            self.elapsed_seconds, "pass_completed" if result.completed else "pass_loose" if misplaced else "pass_intercepted",
             attacking.id, possession.player_id, result.zone, result.receiver_id,
-            result.interceptor_id, possession.zone,
+            None if misplaced else result.interceptor_id, possession.zone,
             completion_probability=result.completion_probability,
             passer_passing=next(p.attributes.passing for p in attacking.lineup
                                 if p.id == possession.player_id),
             location=location, origin_location=possession.location,
             pressure=pressure.intensity, pressing_player_id=pressure.defender_id,
         ))
+        if misplaced:
+            self.set_loose_ball(location, reason="misplaced_pass")
 
     def _play_shot(self, possession: Possession, attacking: TeamInPlay, defending: TeamInPlay,
                    pressure: Pressure):

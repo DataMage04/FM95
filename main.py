@@ -13,8 +13,13 @@ def main():
     shown_passes = 0
     shown_dribbles = 0
     shown_presses = 0
+    shown_loose = 0
     for event in match.events:
         is_pass = event.kind.startswith("pass_")
+        if event.kind in ("ball_loose", "ball_recovered", "ball_unrecovered"):
+            shown_loose += 1
+            if shown_loose > 10:
+                continue
         if event.kind.startswith("press_"):
             shown_presses += 1
             if shown_presses > 10:
@@ -57,7 +62,8 @@ def main():
               f"tackles={stats.tackles_won}/{stats.tackles_attempted}; fouls={stats.fouls_committed}; "
               f"free kicks taken={stats.free_kicks_taken}; "
               f"cards={stats.yellow_cards}Y/{stats.red_cards}R; "
-              f"presses won={stats.presses_won}/{stats.presses_attempted}")
+              f"presses won={stats.presses_won}/{stats.presses_attempted}; recoveries={stats.recoveries}")
+    print(f"Uncontrolled ball time: {match.loose_ball_seconds} s; possession shares use controlled time.")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
     print(f"Match status: {match.phase.value}")
     print("Neutral-attribute demo: values are provisional, restart handling is simplified.")

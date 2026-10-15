@@ -6,6 +6,7 @@ from fm95.batch import run_match, run_batch
 from fm95.defending import (DefenseConfig, defensive_targets, goal_side,
                             measure_pressure, move_towards)
 from fm95.demo import demo_team
+from fm95.recovery import RecoveryConfig
 from fm95.match import Match, Phase
 from fm95.pitch import Direction, Location, Pitch, Zone
 
@@ -16,6 +17,7 @@ class DefendingTests(unittest.TestCase):
 
     def make_match(self, win=1, foul=0):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+            recovery_config=RecoveryConfig(enabled=False),
             action_config=ActionConfig(interval_seconds=1, shot_probability=0, dribble_probability=0,
                 foul_probability=foul, straight_red_probability=0, yellow_card_probability=0),
             defense_config=self.config(win))
@@ -139,7 +141,7 @@ class DefendingTests(unittest.TestCase):
         self.assertEqual(matches[0].player_locations("h"), matches[1].player_locations("h"))
         home, away = matches[0].statistics("h"), matches[0].statistics("a")
         self.assertGreater(home.presses_attempted+away.presses_attempted, 0)
-        self.assertEqual(home.possession_seconds+away.possession_seconds, 5400)
+        self.assertEqual(home.possession_seconds+away.possession_seconds+matches[0].loose_ball_seconds, 5400)
         for own, other in ((home, away), (away, home)):
             self.assertEqual(own.tackles_attempted, own.presses_attempted+other.dribbles_attempted)
             self.assertEqual(own.tackles_won, own.presses_won+other.dribbles_attempted-other.dribbles_completed)

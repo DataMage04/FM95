@@ -2,6 +2,7 @@ from dataclasses import replace
 import unittest
 
 from fm95.actions import ActionConfig
+from fm95.recovery import RecoveryConfig
 from fm95.batch import run_batch, run_match
 from fm95.demo import demo_team
 from fm95.match import Match, Phase
@@ -11,6 +12,7 @@ from fm95.pitch import CENTRE, Zone
 class DisciplineTests(unittest.TestCase):
     def make_match(self, config=None):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+                     recovery_config=RecoveryConfig(enabled=False),
                      action_config=config)
 
     def test_two_yellows_dismiss_and_preserve_starting_lineup(self):

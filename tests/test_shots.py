@@ -2,6 +2,7 @@ import unittest
 from random import Random
 
 from fm95.actions import ActionConfig, choose_action
+from fm95.recovery import RecoveryConfig
 from fm95.match import Match, Phase
 from fm95.pitch import CENTRE, Direction, Zone
 from main import demo_team
@@ -10,6 +11,7 @@ from main import demo_team
 class ShotTests(unittest.TestCase):
     def make_match(self, on_target=1, goal=1):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+                     recovery_config=RecoveryConfig(enabled=False),
                      action_config=ActionConfig(interval_seconds=1, shot_probability=1,
                          on_target_probability=on_target,
                          goal_given_on_target_probability=goal))

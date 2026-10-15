@@ -4,6 +4,7 @@ import unittest
 
 from fm95.actions import ActionConfig, choose_action, dribble_success_chance, resolve_dribble
 from fm95.attributes import Attributes
+from fm95.recovery import RecoveryConfig
 from fm95.batch import run_match
 from fm95.demo import demo_team
 from fm95.match import Match, Possession
@@ -18,6 +19,7 @@ class DribblingTests(unittest.TestCase):
     def test_forced_take_on_outcomes_and_statistics(self):
         for success in (0, 1):
             match = Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+                          recovery_config=RecoveryConfig(enabled=False),
                           action_config=self.config(success))
             match.start()
             original = match.possession
@@ -93,7 +95,7 @@ class DribblingTests(unittest.TestCase):
             self.assertEqual(own.dribbles_attempted + opponent.presses_attempted, opponent.tackles_attempted)
             self.assertEqual(own.dribbles_attempted-own.dribbles_completed + opponent.presses_won,
                              opponent.tackles_won)
-        self.assertEqual(home.possession_seconds+away.possession_seconds, 5400)
+        self.assertEqual(home.possession_seconds+away.possession_seconds+matches[0].loose_ball_seconds, 5400)
 
     def test_validation(self):
         for name in ("dribbling", "tackling"):

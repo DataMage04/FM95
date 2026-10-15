@@ -30,6 +30,8 @@ class TeamStats:
     presses_attempted: int
     presses_won: int
     pressing_fouls: int
+    misplaced_passes: int
+    recoveries: int
 
     @property
     def pass_completion_percentage(self) -> float:
@@ -43,7 +45,7 @@ def team_statistics(team_id, opponent_id, events, possession_seconds) -> TeamSta
     held = possession_seconds[team_id]
     return TeamStats(
         team_id=team_id, goals=own["goal"],
-        passes_attempted=own["pass_completed"] + own["pass_intercepted"],
+        passes_attempted=own["pass_completed"] + own["pass_intercepted"] + own["pass_loose"],
         passes_completed=own["pass_completed"],
         shots=own["goal"] + own["shot_saved"] + own["shot_missed"],
         shots_on_target=own["goal"] + own["shot_saved"],
@@ -52,14 +54,17 @@ def team_statistics(team_id, opponent_id, events, possession_seconds) -> TeamSta
         expected_goals=sum(e.goal_probability for e in events
                            if e.team_id == team_id and e.kind in ("goal", "shot_saved", "shot_missed")
                            and e.goal_probability is not None),
-        dribbles_attempted=own["dribble_completed"] + own["dribble_tackled"],
+        dribbles_attempted=own["dribble_completed"] + own["dribble_tackled"] + own["dribble_dispossessed"],
         dribbles_completed=own["dribble_completed"],
         tackles_attempted=opponent["dribble_completed"] + opponent["dribble_tackled"]
-                          + own["press_won"] + own["press_evaded"],
-        tackles_won=opponent["dribble_tackled"] + own["press_won"],
+                          + opponent["dribble_dispossessed"] + own["press_won"]
+                          + own["press_evaded"] + own["press_dispossessed"],
+        tackles_won=opponent["dribble_tackled"] + opponent["dribble_dispossessed"]
+                    + own["press_won"] + own["press_dispossessed"],
         fouls_committed=own["foul"], fouls_suffered=opponent["foul"],
         free_kicks_awarded=own["free_kick_awarded"], free_kicks_taken=own["free_kick_taken"],
         yellow_cards=own["yellow_card"], red_cards=own["red_card"],
-        presses_attempted=own["press_won"] + own["press_evaded"],
-        presses_won=own["press_won"], pressing_fouls=own["press_foul"],
+        presses_attempted=own["press_won"] + own["press_evaded"] + own["press_dispossessed"],
+        presses_won=own["press_won"] + own["press_dispossessed"], pressing_fouls=own["press_foul"],
+        misplaced_passes=own["pass_loose"], recoveries=own["ball_recovered"],
     )

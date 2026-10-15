@@ -2,6 +2,7 @@ import unittest
 from random import Random
 
 from fm95.actions import ActionConfig, resolve_pass
+from fm95.recovery import RecoveryConfig
 from fm95.match import Match, Phase, Possession
 from fm95.pitch import Direction, Zone
 from main import demo_team
@@ -10,6 +11,7 @@ from main import demo_team
 class PassingTests(unittest.TestCase):
     def make_match(self, probability=.85, interval=6):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+                     recovery_config=RecoveryConfig(enabled=False),
                      action_config=ActionConfig(interval, probability, shot_probability=0,
                                                 dribble_probability=0))
 
