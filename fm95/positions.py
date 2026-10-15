@@ -2,7 +2,7 @@
 
 from enum import Enum
 
-from fm95.pitch import Direction, Zone
+from fm95.pitch import Direction, Location, Zone
 
 
 class Position(str, Enum):
@@ -35,3 +35,25 @@ def involvement_weight(position: Position, destination: Zone, direction: Directi
     anchor = operating_zone(position, direction)
     distance = abs(anchor.column - destination.column) + abs(anchor.lane - destination.lane)
     return 1 / (1 + distance) ** 2
+
+
+REFERENCE_POINTS = {
+    Position.GK: Location(.05, .5), Position.CB: Location(.22, .5),
+    Position.LB: Location(.25, .84), Position.RB: Location(.25, .16),
+    Position.DM: Location(.38, .5), Position.CM: Location(.50, .5), Position.AM: Location(.62, .5),
+    Position.LW: Location(.82, .84), Position.RW: Location(.82, .16), Position.ST: Location(.82, .5),
+}
+
+
+def formation_reference_locations(players, direction: Direction) -> dict[str, Location]:
+    """Return static shape targets; repeated central positions share the line across lanes."""
+    locations = {}
+    for position in Position:
+        group = [p for p in players if p.position == position]
+        for index, player in enumerate(group):
+            point = REFERENCE_POINTS[position]
+            if len(group) > 1:
+                y = max(.01, min(.99, point.y + .30 * (index/(len(group)-1) - .5)))
+                point = Location(point.x, y)
+            locations[player.id] = point if direction == Direction.RIGHT else point.rotated()
+    return locations

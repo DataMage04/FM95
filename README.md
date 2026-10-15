@@ -243,7 +243,7 @@ free kick; added-time handling remains unfinished.
 Possession is credited to the awarded team while awaiting that next action,
 under the existing coarse possession-time convention. There is no separate
 dead-ball clock yet. All fouls currently award the same prototype free kick:
-penalty-area geometry/penalties, direct free-kick shots, advantage, severity
+penalty decisions, direct free-kick shots, advantage, severity
 and discipline attributes are deferred. This is an incremental game model rather
 than a complete implementation of football rules. Calibration remains deferred
 until all intended Milestone 1 features are in place.
@@ -289,6 +289,56 @@ Relevant rule references: [IFAB Law 3](https://theifab.com/laws/latest/the-playe
 and [IFAB Law 12](https://theifab.com/laws/latest/fouls-and-misconduct/).
 Offence classification, advantage, post-match sanctions, suspensions and appeals
 remain outside this increment. Probability and attribute calibration remain deferred.
+
+## Precise ball locations and formation geometry
+
+`Location(x, y)` stores normalized, fixed-pitch coordinates in [0, 1], with x
+left-to-right and y bottom-to-top. `location.zone` derives the existing 3×3 cell;
+exact internal grid boundaries belong to the higher-index cell, and 1 maps to
+the final cell. `Possession` stores location as the single source of ball position
+and exposes zone as a derived property. Existing zone-based constructors still
+work by placing the ball at that zone's centre. Inconsistent zone/location inputs
+are rejected before mutation.
+
+```python
+from fm95.pitch import Location
+
+match.set_possession("home", "home-9", location=Location(0.91, 0.55))
+point = match.ball_location
+metres = match.pitch.metres(point)
+inside = match.pitch.in_penalty_area(point, match.attacking_direction("away"))
+targets = match.formation_reference_locations("home")
+```
+
+`Pitch` defaults to a 105×68 m model field and provides metric conversion,
+Euclidean distance and inclusive penalty-area membership for either defending
+end. It uses 16.5 m penalty depth and 7.32 m goal width, with penalty width derived
+from those dimensions. Geometry follows [IFAB Law 1](https://theifab.com/laws/latest/the-field-of-play/).
+`Match(..., pitch=Pitch(...))` accepts other model dimensions with validation that
+areas fit. This validation is geometric, not a complete competition-dimensions
+validator. Penalty geometry is available but does not yet change foul awards.
+
+Passes now receive provisional endpoints within the selected destination zone.
+These points are sampled independently of receiver movement, inset from cell
+edges. Dribbles translate the carrier's within-cell offset into the destination
+cell; failed challenges leave it unchanged. Kickoffs use exact centre, and held
+saves/goal kicks give the keeper a point near their defended end. No ball flight
+is simulated. Action probabilities still use their existing zone context.
+
+Fouls and pending restarts preserve exact location. Spatial action events include
+`location` and, where relevant, `origin_location`; the CLI prints metric endpoints.
+Changing the endpoint sampling consumes random draws, so seeded results differ
+from earlier engine versions while remaining reproducible within this version.
+
+Formation reference points now separate DM/CM/AM longitudinally and spread
+repeated positions, such as two CBs or CMs, laterally. They rotate across both
+axes at halftime and exclude dismissed players, including emergency keeper role
+changes. The returned mapping is an independent snapshot. These are static shape
+targets, not simulated player coordinates or legal kickoff placements. They do
+not yet drive movement, pressure, marking or offside, and the earlier operating
+zone weights remain in use. Those behaviors are subsequent features.
+
+No action probabilities, attribute ranges or distributions were calibrated.
 
 ## Assigned positions and operating zones
 

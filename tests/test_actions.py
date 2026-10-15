@@ -32,7 +32,8 @@ class PassingTests(unittest.TestCase):
             self.assertNotEqual(event.receiver_id, original.player_id)
             self.assertEqual(event.origin, original.zone)
             carrier = event.receiver_id if probability else event.interceptor_id
-            self.assertEqual(match.possession, Possession(owner, carrier, event.zone))
+            self.assertEqual((match.possession.team_id, match.possession.player_id, match.possession.zone),
+                             (owner, carrier, event.zone))
             self.assertEqual(event.team_id, "h")
 
     def test_reproducible_full_match_and_ownership(self):

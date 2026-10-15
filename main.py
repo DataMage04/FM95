@@ -35,7 +35,11 @@ def main():
         challenge = (f" defender={event.defender_id}, take_on_p={event.dribble_success_probability:.3f}"
                      if event.defender_id else "")
         foul = f" fouled_player={event.fouled_player_id}" if event.fouled_player_id else ""
-        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{target}{won}{keeper}{probability}{quality}{challenge}{foul}")
+        coordinates = ""
+        if event.location is not None:
+            x, y = match.pitch.metres(event.location)
+            coordinates = f" xy=({x:.1f}, {y:.1f})m"
+        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}{coordinates}{target}{won}{keeper}{probability}{quality}{challenge}{foul}")
     for team in (match.home, match.away):
         stats = match.statistics(team.id)
         print(f"{team.name}: {stats.passes_completed}/{stats.passes_attempted} passes completed; "

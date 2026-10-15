@@ -5,10 +5,10 @@ from enum import Enum
 from random import Random
 
 from fm95.actions import ActionConfig, choose_action, resolve_pass, resolve_shot, resolve_dribble, foul_card
-from fm95.pitch import CENTRE, Direction, Zone
+from fm95.pitch import CENTRE, Direction, Location, Pitch, Zone
 from fm95.statistics import TeamStats, team_statistics
 from fm95.attributes import Attributes
-from fm95.positions import Position, operating_zone
+from fm95.positions import Position, operating_zone, formation_reference_locations
 
 
 @dataclass(frozen=True)
@@ -91,15 +91,33 @@ class MatchEvent:
     fouled_player_id: str | None = None
     foul_probability: float | None = None
     reason: str | None = None
+    location: Location | None = None
+    origin_location: Location | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class Possession:
     """One coherent ownership record; None on Match means no active possession."""
 
     team_id: str
     player_id: str
-    zone: Zone
+    location: Location
+
+    def __init__(self, team_id: str, player_id: str, zone: Zone | None = None,
+                 *, location: Location | None = None):
+        if location is None:
+            if not isinstance(zone, Zone):
+                raise ValueError("Possession needs a zone or location.")
+            location = Location.centre_of(zone)
+        if not isinstance(location, Location) or (zone is not None and location.zone != zone):
+            raise ValueError("Possession location must agree with its zone.")
+        object.__setattr__(self, "team_id", team_id)
+        object.__setattr__(self, "player_id", player_id)
+        object.__setattr__(self, "location", location)
+
+    @property
+    def zone(self) -> Zone:
+        return self.location.zone
 
 
 @dataclass(frozen=True)
@@ -108,6 +126,13 @@ class Restart:
     team_id: str
     taker_id: str
     zone: Zone
+    location: Location | None = None
+
+    def __post_init__(self):
+        if self.location is None:
+            object.__setattr__(self, "location", Location.centre_of(self.zone))
+        if not isinstance(self.location, Location) or self.location.zone != self.zone:
+            raise ValueError("Restart location must agree with its zone.")
 
 
 class Match:
@@ -120,13 +145,14 @@ class Match:
     HALF_SECONDS = 45 * 60
 
     def __init__(self, home: Team, away: Team, *, seed: int | None = None,
-                 action_config: ActionConfig | None = None):
+                 action_config: ActionConfig | None = None, pitch: Pitch | None = None):
         if home.id == away.id:
             raise ValueError("A team cannot play itself.")
         if {p.id for p in home.lineup} & {p.id for p in away.lineup}:
             raise ValueError("A player cannot appear for both teams.")
         self.home = home
         self.away = away
+        self.pitch = pitch if pitch is not None else Pitch()
         self.phase = Phase.PRE_MATCH
         self.elapsed_seconds = 0
         self.home_goals = 0
@@ -191,7 +217,7 @@ class Match:
             active = self.active_players(team_id)
         if self._possession is not None and self._possession.player_id == player_id:
             replacement = next(p for p in active if not p.is_goalkeeper)
-            self._possession = Possession(team_id, replacement.id, self._possession.zone)
+            self._possession = Possession(team_id, replacement.id, location=self._possession.location)
             if self._pending_restart is not None:
                 self._pending_restart = replace(self._pending_restart, taker_id=replacement.id)
 
@@ -221,13 +247,22 @@ class Match:
             raise ValueError("Player must belong to the selected team.")
         return operating_zone(player.position, self.attacking_direction(team_id))
 
+    def formation_reference_locations(self, team_id: str) -> dict[str, Location]:
+        """Static formation targets, not actual moving-player coordinates."""
+        return formation_reference_locations(self.active_players(team_id), self.attacking_direction(team_id))
+
+    @property
+    def ball_location(self) -> Location | None:
+        return self._possession.location if self._possession is not None else None
+
     def _team(self, team_id: str) -> Team:
         for team in (self.home, self.away):
             if team.id == team_id:
                 return team
         raise ValueError(f"Unknown match team: {team_id}")
 
-    def set_possession(self, team_id: str, player_id: str, zone: Zone):
+    def set_possession(self, team_id: str, player_id: str, zone: Zone | None = None,
+                       *, location: Location | None = None):
         """Apply an action's resolved ownership/location; does not decide its success.
 
         Passing and tackling will call this after resolving their outcomes.
@@ -238,12 +273,11 @@ class Match:
         team = self._team(team_id)
         if player_id not in {player.id for player in self.active_players(team.id)}:
             raise ValueError("The ball carrier must be in the possessing team's lineup.")
-        if not isinstance(zone, Zone):
-            raise ValueError("Ball location must be a Zone.")
-        self._possession = Possession(team_id, player_id, zone)
+        possession = Possession(team_id, player_id, zone, location=location)
+        self._possession = possession
         self._pending_restart = None
         self.events.append(MatchEvent(self.elapsed_seconds, "possession", team_id,
-                                      player_id, zone))
+                                      player_id, possession.zone, location=possession.location))
 
     def _kickoff(self, team: Team):
         team = self._active_team(team.id)
@@ -253,7 +287,7 @@ class Match:
         self._pending_restart = None
         self._seconds_since_action = 0
         self.events.append(MatchEvent(self.elapsed_seconds, "kickoff", team.id,
-                                      taker.id, CENTRE))
+                                      taker.id, CENTRE, location=self._possession.location))
 
     def start(self):
         if self.phase != Phase.PRE_MATCH:
@@ -302,7 +336,8 @@ class Match:
             restart = self._pending_restart
             self._pending_restart = None
             self.events.append(MatchEvent(self.elapsed_seconds, "free_kick_taken",
-                                          restart.team_id, restart.taker_id, restart.zone))
+                                          restart.team_id, restart.taker_id, restart.zone,
+                                          location=restart.location))
             action = "pass"  # Initial free kicks are short restarts, not open-play take-ons.
         else:
             action = choose_action(possession.zone, self.attacking_direction(attacking.id),
@@ -319,6 +354,7 @@ class Match:
                     self.elapsed_seconds, "foul", defending.id, result.defender_id,
                     possession.zone, fouled_player_id=possession.player_id,
                     foul_probability=self.action_config.foul_probability,
+                    location=possession.location,
                 ))
                 card = foul_card(self._rng, self.action_config)
                 if card is not None:
@@ -326,27 +362,34 @@ class Match:
                     if self.phase == Phase.ABANDONED:
                         return
                 self._pending_restart = Restart("free_kick", attacking.id,
-                                                possession.player_id, possession.zone)
+                                                possession.player_id, possession.zone, possession.location)
                 self.events.append(MatchEvent(self.elapsed_seconds, "free_kick_awarded",
-                                              attacking.id, possession.player_id, possession.zone))
+                                              attacking.id, possession.player_id, possession.zone,
+                                              location=possession.location))
                 return
             zone = result.destination if result.completed else possession.zone
-            self._possession = (Possession(attacking.id, possession.player_id, zone)
-                                if result.completed else Possession(defending.id, result.defender_id, zone))
+            location = possession.location.shifted_to(zone) if result.completed else possession.location
+            self._possession = (Possession(attacking.id, possession.player_id, location=location)
+                                if result.completed else Possession(defending.id, result.defender_id,
+                                                                    location=location))
             self.events.append(MatchEvent(
                 self.elapsed_seconds, "dribble_completed" if result.completed else "dribble_tackled",
                 attacking.id, possession.player_id, zone, origin=possession.zone,
                 defender_id=result.defender_id, dribble_success_probability=result.success_probability,
                 carrier_dribbling=carrier.attributes.dribbling, defender_tackling=result.defender_tackling,
+                location=location, origin_location=possession.location,
             ))
             return
         result = resolve_pass(possession, attacking, defending,
                               self.attacking_direction(attacking.id), self._rng,
                               self.action_config)
+        # Provisional endpoint inside the chosen zone; no ball flight or player motion yet.
+        location = Location((result.zone.column+.05+.90*self._rng.random())/3,
+                            (result.zone.lane+.05+.90*self._rng.random())/3)
         if result.completed:
-            self._possession = Possession(attacking.id, result.receiver_id, result.zone)
+            self._possession = Possession(attacking.id, result.receiver_id, location=location)
         else:
-            self._possession = Possession(defending.id, result.interceptor_id, result.zone)
+            self._possession = Possession(defending.id, result.interceptor_id, location=location)
         # One action event records the passer, intended receiver, destination and outcome.
         self.events.append(MatchEvent(
             self.elapsed_seconds, "pass_completed" if result.completed else "pass_intercepted",
@@ -355,6 +398,7 @@ class Match:
             completion_probability=result.completion_probability,
             passer_passing=next(p.attributes.passing for p in attacking.lineup
                                 if p.id == possession.player_id),
+            location=location, origin_location=possession.location,
         ))
 
     def _play_shot(self, possession: Possession, attacking: TeamInPlay, defending: TeamInPlay):
@@ -371,6 +415,7 @@ class Match:
             goal_probability=result.goal_probability,
             shooter_finishing=shooter.attributes.finishing,
             goalkeeper_shot_stopping=goalkeeper.attributes.shot_stopping,
+            location=possession.location, origin_location=possession.location,
         ))
         if outcome == "goal":
             if attacking.id == self.home.id:
@@ -382,7 +427,8 @@ class Match:
             # Held save or instant goal-kick restart in the keeper's defensive zone.
             column = 0 if self.attacking_direction(defending.id) == Direction.RIGHT else 2
             zone = Zone(column, 1)
-            self._possession = Possession(defending.id, goalkeeper.id, zone)
+            location = Location(.05 if column == 0 else .95, .5)
+            self._possession = Possession(defending.id, goalkeeper.id, location=location)
             if outcome == "shot_missed":
                 self.events.append(MatchEvent(self.elapsed_seconds, "goal_kick",
-                                              defending.id, goalkeeper.id, zone))
+                                              defending.id, goalkeeper.id, zone, location=location))
