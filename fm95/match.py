@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
+from fm95.pitch import CENTRE, Direction, Zone
+
 
 @dataclass(frozen=True)
 class Player:
@@ -39,6 +41,17 @@ class MatchEvent:
     elapsed_seconds: int
     kind: str
     team_id: str | None = None
+    player_id: str | None = None
+    zone: Zone | None = None
+
+
+@dataclass(frozen=True)
+class Possession:
+    """One coherent ownership record; None on Match means no active possession."""
+
+    team_id: str
+    player_id: str
+    zone: Zone
 
 
 class Match:
@@ -62,18 +75,60 @@ class Match:
         self.home_goals = 0
         self.away_goals = 0
         self.events: list[MatchEvent] = []
+        self._possession: Possession | None = None
+        self._ends_switched = False
+
+    @property
+    def possession(self) -> Possession | None:
+        return self._possession
+
+    def attacking_direction(self, team_id: str) -> Direction:
+        self._team(team_id)
+        right = (team_id == self.home.id) != self._ends_switched
+        return Direction.RIGHT if right else Direction.LEFT
+
+    def _team(self, team_id: str) -> Team:
+        for team in (self.home, self.away):
+            if team.id == team_id:
+                return team
+        raise ValueError(f"Unknown match team: {team_id}")
+
+    def set_possession(self, team_id: str, player_id: str, zone: Zone):
+        """Apply an action's resolved ownership/location; does not decide its success.
+
+        Passing and tackling will call this after resolving their outcomes.
+        Validation happens before mutation, so rejected changes leave state intact.
+        """
+        if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
+            raise RuntimeError("Possession can change only during play.")
+        team = self._team(team_id)
+        if player_id not in {player.id for player in team.lineup}:
+            raise ValueError("The ball carrier must be in the possessing team's lineup.")
+        if not isinstance(zone, Zone):
+            raise ValueError("Ball location must be a Zone.")
+        self._possession = Possession(team_id, player_id, zone)
+        self.events.append(MatchEvent(self.elapsed_seconds, "possession", team_id,
+                                      player_id, zone))
+
+    def _kickoff(self, team: Team):
+        # Temporary deterministic choice until positions and kickoff selection exist.
+        taker = next(player for player in team.lineup if not player.is_goalkeeper)
+        self._possession = Possession(team.id, taker.id, CENTRE)
+        self.events.append(MatchEvent(self.elapsed_seconds, "kickoff", team.id,
+                                      taker.id, CENTRE))
 
     def start(self):
         if self.phase != Phase.PRE_MATCH:
             raise RuntimeError("Only an unstarted match can start.")
         self.phase = Phase.FIRST_HALF
-        self.events.append(MatchEvent(0, "kickoff", self.home.id))
+        self._kickoff(self.home)
 
     def resume(self):
         if self.phase != Phase.HALF_TIME:
             raise RuntimeError("Only a match at halftime can resume.")
         self.phase = Phase.SECOND_HALF
-        self.events.append(MatchEvent(self.elapsed_seconds, "kickoff", self.away.id))
+        self._ends_switched = True
+        self._kickoff(self.away)
 
     def step(self):
         if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
@@ -82,7 +137,9 @@ class Match:
         # Future: update football actions here, separately from lifecycle logic.
         if self.phase == Phase.FIRST_HALF and self.elapsed_seconds == self.HALF_SECONDS:
             self.phase = Phase.HALF_TIME
+            self._possession = None
             self.events.append(MatchEvent(self.elapsed_seconds, "half_time"))
         elif self.elapsed_seconds == 2 * self.HALF_SECONDS:
             self.phase = Phase.FULL_TIME
+            self._possession = None
             self.events.append(MatchEvent(self.elapsed_seconds, "full_time"))

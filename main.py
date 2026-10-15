@@ -22,7 +22,9 @@ def main():
     for event in match.events:
         minutes, seconds = divmod(event.elapsed_seconds, 60)
         team = f" ({event.team_id})" if event.team_id else ""
-        print(f"{minutes:02}:{seconds:02} {event.kind}{team}")
+        ball = (f" carrier={event.player_id}, zone=({event.zone.column}, {event.zone.lane})"
+                if event.zone is not None else "")
+        print(f"{minutes:02}:{seconds:02} {event.kind}{team}{ball}")
     print(f"{match.home.name} {match.home_goals}–{match.away_goals} {match.away.name}")
     print("Lifecycle demo only: football actions are not implemented yet.")
 
