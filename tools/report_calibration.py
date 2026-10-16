@@ -9,9 +9,9 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from fm95.calibration import loss
-from fm95.actions import ActionConfig, pass_completion_chance, shot_probabilities
-from fm95.pitch import Zone, Direction
+from fm95.analysis.calibration import loss
+from fm95.match.mechanics.actions import ActionConfig, pass_completion_chance, shot_probabilities
+from fm95.match.spatial.pitch import Zone, Direction
 
 
 def main():
@@ -54,7 +54,7 @@ def main():
               "python": platform.python_version(), "engine_python_sha256": code_hash.hexdigest(),
               "simulation_matches_per_profile": calibrated["matches"], "independent_seed": calibrated["seed"],
               "baseline_loss": loss(baseline["metrics"], held), "calibrated_loss": loss(calibrated["metrics"], held),
-              "loss_definition": "RMS of scaled mean errors across 10 declared metrics; floors documented in fm95.calibration.loss; descriptive, not a statistical pass threshold",
+              "loss_definition": "RMS of scaled mean errors across 10 declared metrics; floors documented in fm95.analysis.calibration.loss; descriptive, not a statistical pass threshold",
               "comparisons": comparisons,
               "pass_completion": {"real_holdout": held["pass_completion"], "baseline": baseline["metrics"]["pass_completion"], "calibrated": calibrated["metrics"]["pass_completion"]},
               "attribute_sensitivity": sensitivity, "unfitted": profile["unfitted"],
@@ -78,7 +78,7 @@ def main():
               "", "Area and booked-player multipliers control foul generation, not the legality or sanction after an offence. They compensate for the prototype's spatial/challenge abstraction and are model-specific fitted coefficients, not measured behavioural effects.",
               "", "The fitted profile uses balanced equal-ability synthetic teams, optional added time/woodwork and automatic substitutions; generated injuries and automatic off-ball screening are disabled for fitting. Tactical and attribute stress are separate consistency checks. Historical league mix, unequal real teams, and the absence of home advantage limit result-distribution comparisons.",
               "", "Attribute sensitivity checks verify bounded, monotonic fixed-context responses. Aggregate match data cannot identify a unique player rating scale or skill-response slope. The normalized 0–1 range and response strength remain provisional. Fatigue, injuries, tactical effects, added-time durations and player distributions are not empirically fitted in this pass. Model xG remains the engine's probability output, not a fitted external shot-level xG model.",
-              "", "## Reproduce", "", "```sh", "python tools/build_calibration_data.py", "python -m fm95.calibration --baseline --matches 100 --seed 9000 > baseline.json", "python -m fm95.calibration --matches 100 --seed 9000 > fitted.json", "python tools/report_calibration.py --baseline baseline.json --calibrated fitted.json", "python -m fm95.batch --profile pl2015 --matches 20 --seed 95 --json", "python -m fm95.validation --profile pl2015 --matches 8 --seed 5000 --json", "```", "", "The source revision and per-event-file hashes are pinned in data/calibration/targets.json. Raw events and per-match source summaries stay in the ignored local cache; only aggregate analysis and a hash manifest are tracked. See the upstream [StatsBomb terms](https://github.com/hudl/open-data/blob/master/LICENSE.pdf); this is an analysis/research profile and is not a grant of commercial data rights.", ""]
+              "", "## Reproduce", "", "```sh", "python tools/build_calibration_data.py", "python -m fm95.analysis.calibration --baseline --matches 100 --seed 9000 > baseline.json", "python -m fm95.analysis.calibration --matches 100 --seed 9000 > fitted.json", "python tools/report_calibration.py --baseline baseline.json --calibrated fitted.json", "python -m fm95.match.simulation --profile pl2015 --matches 20 --seed 95 --json", "python -m fm95.analysis.validation --profile pl2015 --matches 8 --seed 5000 --json", "```", "", "The source revision and per-event-file hashes are pinned in data/calibration/targets.json. Raw events and per-match source summaries stay in the ignored local cache; only aggregate analysis and a hash manifest are tracked. See the upstream [StatsBomb terms](https://github.com/hudl/open-data/blob/master/LICENSE.pdf); this is an analysis/research profile and is not a grant of commercial data rights.", ""]
     (ROOT / "docs/calibration.md").write_text("\n".join(lines))
     print(json.dumps({"baseline_loss": report["baseline_loss"], "calibrated_loss": report["calibrated_loss"],
                       "means": {k: [v["real_holdout"]["mean"],v["baseline"]["mean"],v["calibrated"]["mean"]] for k,v in comparisons.items()}}, indent=2))

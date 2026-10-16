@@ -1,8 +1,8 @@
 import unittest
 
-from fm95.actions import ActionConfig
-from fm95.batch import run_batch, run_match
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.simulation import run_batch, run_match
+from fm95.players.demo import demo_team
 from fm95.match import Match, Phase
 
 

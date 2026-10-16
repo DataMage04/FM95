@@ -1,8 +1,8 @@
 import unittest
 
-from fm95.actions import ActionConfig
+from fm95.match.mechanics.actions import ActionConfig
 from fm95.match import Match
-from fm95.pitch import CENTRE, Direction, Third, Zone
+from fm95.match.spatial.pitch import CENTRE, Direction, Third, Zone
 from main import demo_team
 
 

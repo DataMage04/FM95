@@ -1,12 +1,12 @@
 import unittest
 from random import Random
 
-from fm95.actions import (ActionConfig, adjust_probability, pass_completion_chance,
+from fm95.match.mechanics.actions import (ActionConfig, adjust_probability, pass_completion_chance,
                           resolve_shot, shot_probabilities)
-from fm95.batch import run_match
-from fm95.demo import demo_team
+from fm95.match.simulation import run_match
+from fm95.players.demo import demo_team
 from fm95.match import Match
-from fm95.pitch import Direction, Zone
+from fm95.match.spatial.pitch import Direction, Zone
 
 
 class ContextTests(unittest.TestCase):

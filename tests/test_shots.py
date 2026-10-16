@@ -1,15 +1,15 @@
-from fm95.offside import OffsideConfig
-from fm95.boundaries import OutOfPlayConfig
+from fm95.match.mechanics.offside import OffsideConfig
+from fm95.match.mechanics.boundaries import OutOfPlayConfig
 from dataclasses import replace
 import unittest
 from random import Random
 
-from fm95.actions import ActionConfig, choose_action
-from fm95.recovery import RecoveryConfig
-from fm95.shooting import ShotConfig
-from fm95.crossing import CrossConfig
+from fm95.match.mechanics.actions import ActionConfig, choose_action
+from fm95.match.mechanics.recovery import RecoveryConfig
+from fm95.match.mechanics.shooting import ShotConfig
+from fm95.match.mechanics.crossing import CrossConfig
 from fm95.match import Match, Phase
-from fm95.pitch import CENTRE, Direction, Zone
+from fm95.match.spatial.pitch import CENTRE, Direction, Zone
 from main import demo_team
 
 

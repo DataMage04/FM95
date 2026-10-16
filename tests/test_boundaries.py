@@ -2,15 +2,15 @@ from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
-from fm95.actions import ActionConfig
-from fm95.crossing import CrossConfig
-from fm95.batch import run_match, run_batch
-from fm95.boundaries import Boundary, BoundaryExit, OutOfPlayConfig, first_exit
-from fm95.defending import DefenseConfig
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.mechanics.crossing import CrossConfig
+from fm95.match.simulation import run_match, run_batch
+from fm95.match.mechanics.boundaries import Boundary, BoundaryExit, OutOfPlayConfig, first_exit
+from fm95.match.mechanics.defending import DefenseConfig
+from fm95.players.demo import demo_team
 from fm95.match import Match, Phase
-from fm95.pitch import Location, Pitch
-from fm95.shooting import ShotConfig
+from fm95.match.spatial.pitch import Location, Pitch
+from fm95.match.mechanics.shooting import ShotConfig
 
 
 class BoundaryTests(unittest.TestCase):
@@ -99,7 +99,7 @@ class BoundaryTests(unittest.TestCase):
         match.set_possession("a", "a-3", location=Location(.8, .5))
         match.set_possession("h", "h-9", location=Location(.7, .5))
         # Force a non-goal exit; goal-mouth deflections have separate tests.
-        with patch("fm95.match.rebound_endpoint", return_value=(1.1, .9)):
+        with patch("fm95.match.engine.rebound_endpoint", return_value=(1.1, .9)):
             match.step()
         out = next(e for e in match.events if e.kind == "ball_out")
         self.assertEqual((out.team_id, out.player_id), ("a", "a-3"))
@@ -127,7 +127,7 @@ class BoundaryTests(unittest.TestCase):
         match.start()
         match.set_possession("h", "h-9", location=Location(.8, .5))
         # Force a non-goal exit; goal-mouth deflections have separate tests.
-        with patch("fm95.match.rebound_endpoint", return_value=(1.1, .9)):
+        with patch("fm95.match.engine.rebound_endpoint", return_value=(1.1, .9)):
             match.step()
         out = next(e for e in match.events if e.kind == "ball_out")
         self.assertEqual((out.team_id, out.player_id), ("a", "a-1"))

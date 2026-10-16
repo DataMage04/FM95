@@ -1,13 +1,13 @@
 import unittest
 from unittest.mock import patch
 
-from fm95.demo import demo_team
+from fm95.players.demo import demo_team
 from fm95.match import Match, Phase
-from fm95.pitch import Location
-from fm95.positions import Position
-from fm95.roles import Duty, instructions_for
-from fm95.tactics import TeamTactics, action_preferences
-from fm95.actions import ActionConfig
+from fm95.match.spatial.pitch import Location
+from fm95.match.spatial.positions import Position
+from fm95.match.systems.roles import Duty, instructions_for
+from fm95.match.tactics import TeamTactics, action_preferences
+from fm95.match.mechanics.actions import ActionConfig
 
 
 class FormationAndDutyTests(unittest.TestCase):
@@ -74,7 +74,7 @@ class FormationAndDutyTests(unittest.TestCase):
         self.assertEqual(attrs, match.effective_attributes('h', 'h-9'))
         match.start()
         match.set_possession('h', 'h-9', location=Location(.8, .5))
-        with patch('fm95.match.action_preferences', wraps=action_preferences) as choices:
+        with patch('fm95.match.engine.action_preferences', wraps=action_preferences) as choices:
             match._play_action()
         self.assertEqual(choices.call_args.args[1], instructions_for(TeamTactics(), Duty.ATTACK))
 

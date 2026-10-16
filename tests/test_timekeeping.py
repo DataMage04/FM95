@@ -2,14 +2,14 @@ from dataclasses import FrozenInstanceError, asdict, replace
 import unittest
 from unittest.mock import patch
 
-from fm95.defending import Pressure
-from fm95.shooting import ShotConfig
-from fm95.actions import ActionConfig
-from fm95.batch import run_batch, run_match
-from fm95.demo import demo_team
+from fm95.match.mechanics.defending import Pressure
+from fm95.match.mechanics.shooting import ShotConfig
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.simulation import run_batch, run_match
+from fm95.players.demo import demo_team
 from fm95.match import Match, Phase, Restart
-from fm95.pitch import Location
-from fm95.timekeeping import AddedTimeConfig
+from fm95.match.spatial.pitch import Location
+from fm95.match.systems.timekeeping import AddedTimeConfig
 
 
 class AddedTimeTests(unittest.TestCase):

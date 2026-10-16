@@ -2,14 +2,14 @@ from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
-from fm95.actions import ActionConfig
-from fm95.decisions import (DecisionConfig, DecisionTendencies, apply_decisions,
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.players.decisions import (DecisionConfig, DecisionTendencies, apply_decisions,
                             decision_probability)
-from fm95.demo import demo_team
+from fm95.players.demo import demo_team
 from fm95.match import Match, Possession, Restart, Team
-from fm95.pitch import Location
-from fm95.defending import Pressure
-from fm95.positions import Position
+from fm95.match.spatial.pitch import Location
+from fm95.match.mechanics.defending import Pressure
+from fm95.match.spatial.positions import Position
 
 
 class PlayerDecisionTests(unittest.TestCase):
@@ -59,7 +59,7 @@ class PlayerDecisionTests(unittest.TestCase):
                       decision_config=DecisionConfig(1))
         match.start()
         match.set_possession("h", special.id, location=Location(.5, .5))
-        with patch("fm95.match.apply_decisions", wraps=apply_decisions) as applied:
+        with patch("fm95.match.engine.apply_decisions", wraps=apply_decisions) as applied:
             match._resolve_action()
         self.assertEqual(applied.call_count, 1)
         self.assertEqual(applied.call_args.args[4], special.decisions)
@@ -70,13 +70,13 @@ class PlayerDecisionTests(unittest.TestCase):
 
         match._pending_restart = Restart("throw_in", "h", special.id,
                                          Location(.5, .5).zone, Location(.5, .5))
-        with patch("fm95.match.apply_decisions", wraps=apply_decisions) as applied:
+        with patch("fm95.match.engine.apply_decisions", wraps=apply_decisions) as applied:
             match._resolve_action()
         self.assertEqual(applied.call_count, 0)
 
     def test_substitution_carries_the_incoming_players_own_decision_profile(self):
-        from fm95.substitutions import SubstitutionConfig
-        from fm95.player_factory import generate_team
+        from fm95.match.systems.substitutions import SubstitutionConfig
+        from fm95.players.factory import generate_team
 
         team = generate_team("h", "Home", seed=95)
         match = Match(team, demo_team("a", "Away"), seed=95,

@@ -2,11 +2,11 @@ from dataclasses import FrozenInstanceError, replace
 import unittest
 from unittest.mock import patch
 
-from fm95.demo import demo_team
+from fm95.players.demo import demo_team
 from fm95.match import Match, Phase, Possession, Restart
-from fm95.pitch import Location, Direction
-from fm95.roles import Duty
-from fm95.transitions import TransitionConfig, transition_targets
+from fm95.match.spatial.pitch import Location, Direction
+from fm95.match.systems.roles import Duty
+from fm95.match.mechanics.transitions import TransitionConfig, transition_targets
 
 
 class TransitionTests(unittest.TestCase):

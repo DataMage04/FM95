@@ -2,12 +2,12 @@ from dataclasses import FrozenInstanceError, replace
 from random import Random
 import unittest
 
-from fm95.actions import ActionConfig, pass_completion_chance, resolve_pass, shot_probabilities
-from fm95.attributes import Attributes
-from fm95.batch import run_match
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig, pass_completion_chance, resolve_pass, shot_probabilities
+from fm95.players.attributes import Attributes
+from fm95.match.simulation import run_match
+from fm95.players.demo import demo_team
 from fm95.match import Match, Player, Team
-from fm95.pitch import Direction, Zone
+from fm95.match.spatial.pitch import Direction, Zone
 
 
 class AttributeTests(unittest.TestCase):

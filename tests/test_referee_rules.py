@@ -1,12 +1,12 @@
 import unittest
 from dataclasses import replace
-from fm95.demo import demo_team
+from fm95.players.demo import demo_team
 from fm95.match import Match,Phase,Restart
-from fm95.pitch import Location
-from fm95.actions import ActionConfig
-from fm95.rules import PenaltyIncident,PenaltyOffence,TouchKind,penalty_decision
-from fm95.shooting import ShotConfig
-from fm95.defending import DefenseConfig
+from fm95.match.spatial.pitch import Location
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.mechanics.rules import PenaltyIncident,PenaltyOffence,TouchKind,penalty_decision
+from fm95.match.mechanics.shooting import ShotConfig
+from fm95.match.mechanics.defending import DefenseConfig
 
 class RefereeRuleTests(unittest.TestCase):
     def make_match(self):

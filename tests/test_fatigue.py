@@ -1,18 +1,18 @@
 from dataclasses import FrozenInstanceError
 import unittest
 
-from fm95.actions import ActionConfig, pass_completion_chance
-from fm95.attributes import Attributes
-from fm95.batch import run_batch
-from fm95.boundaries import Boundary, BoundaryExit
-from fm95.crossing import CrossConfig
-from fm95.defending import DefenseConfig
-from fm95.demo import demo_team
-from fm95.fatigue import (FatigueConfig, PlayerCondition, effective_attributes, movement_factor,
+from fm95.match.mechanics.actions import ActionConfig, pass_completion_chance
+from fm95.players.attributes import Attributes
+from fm95.match.simulation import run_batch
+from fm95.match.mechanics.boundaries import Boundary, BoundaryExit
+from fm95.match.mechanics.crossing import CrossConfig
+from fm95.match.mechanics.defending import DefenseConfig
+from fm95.players.demo import demo_team
+from fm95.match.systems.fatigue import (FatigueConfig, PlayerCondition, effective_attributes, movement_factor,
                           movement, tick)
 from fm95.match import Match, Phase
-from fm95.pitch import Location
-from fm95.through_balls import ThroughBallConfig, forward_runs
+from fm95.match.spatial.pitch import Location
+from fm95.match.mechanics.through_balls import ThroughBallConfig, forward_runs
 
 
 class FatigueTests(unittest.TestCase):

@@ -1,18 +1,18 @@
 from dataclasses import FrozenInstanceError, replace
 import unittest
 
-from fm95.actions import ActionConfig
-from fm95.attributes import Attributes
-from fm95.batch import run_batch
-from fm95.boundaries import Boundary, BoundaryExit
-from fm95.demo import demo_team
-from fm95.defending import DefenseConfig
-from fm95.injuries import InjuryConfig, interval_chance
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.players.attributes import Attributes
+from fm95.match.simulation import run_batch
+from fm95.match.mechanics.boundaries import Boundary, BoundaryExit
+from fm95.players.demo import demo_team
+from fm95.match.mechanics.defending import DefenseConfig
+from fm95.match.systems.injuries import InjuryConfig, interval_chance
 from fm95.match import Match, Phase
-from fm95.pitch import Direction, Location
-from fm95.positions import Position
-from fm95.substitution_policy import AutoSubstitutionConfig
-from fm95.substitutions import SubstitutionConfig
+from fm95.match.spatial.pitch import Direction, Location
+from fm95.match.spatial.positions import Position
+from fm95.match.systems.substitution_policy import AutoSubstitutionConfig
+from fm95.match.systems.substitutions import SubstitutionConfig
 
 
 class InjuryTests(unittest.TestCase):

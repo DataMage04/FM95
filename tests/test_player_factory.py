@@ -1,10 +1,10 @@
 import unittest
 from statistics import mean
 
-from fm95.batch import run_batch
+from fm95.match.simulation import run_batch
 from fm95.match import Match
-from fm95.player_factory import generate_attributes, generate_team
-from fm95.positions import Position
+from fm95.players.factory import generate_attributes, generate_team
+from fm95.match.spatial.positions import Position
 
 
 class PlayerFactoryTests(unittest.TestCase):

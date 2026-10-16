@@ -2,14 +2,14 @@ from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
-from fm95.actions import ActionConfig
-from fm95.boundaries import Boundary, BoundaryExit
-from fm95.defending import DefenseConfig, Pressure
-from fm95.demo import demo_team
-from fm95.goals import crosses_goal_mouth
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.mechanics.boundaries import Boundary, BoundaryExit
+from fm95.match.mechanics.defending import DefenseConfig, Pressure
+from fm95.players.demo import demo_team
+from fm95.match.mechanics.goals import crosses_goal_mouth
 from fm95.match import Match, Phase
-from fm95.pitch import Location, Pitch
-from fm95.shooting import ShotConfig
+from fm95.match.spatial.pitch import Location, Pitch
+from fm95.match.mechanics.shooting import ShotConfig
 
 
 class DeflectionGoalTests(unittest.TestCase):
@@ -76,7 +76,7 @@ class DeflectionGoalTests(unittest.TestCase):
             action_config=ActionConfig(on_target_probability=1,goal_given_on_target_probability=0),
             shot_config=ShotConfig(block_probability=0,parry_probability=1))
         match.set_possession('h','h-9',location=Location(.8,.5))
-        with patch('fm95.match.rebound_endpoint',return_value=(1.01,.5)):
+        with patch('fm95.match.engine.rebound_endpoint',return_value=(1.01,.5)):
             match._play_shot(match.possession,match._active_team('h'),match._active_team('a'),Pressure(None,None,0))
         self.assertEqual([e.kind for e in match.events[-3:]],['goal','goal_attribution','kickoff'])
         home,away = match.statistics('h'),match.statistics('a')
@@ -89,7 +89,7 @@ class DeflectionGoalTests(unittest.TestCase):
             shot_config=ShotConfig(block_probability=1),action_config=ActionConfig(on_target_probability=0))
         match.set_possession('a','a-3',location=Location(.9,.5))
         match.set_possession('h','h-9',location=Location(.8,.5))
-        with patch('fm95.match.rebound_endpoint',return_value=(1.01,.5)):
+        with patch('fm95.match.engine.rebound_endpoint',return_value=(1.01,.5)):
             match._play_shot(match.possession,match._active_team('h'),match._active_team('a'),Pressure(None,None,0))
         self.assertEqual(match.events[-2].player_id,'a-3')
         self.assertEqual(match.statistics('h').shots_blocked,1)
@@ -102,7 +102,7 @@ class DeflectionGoalTests(unittest.TestCase):
             action_config=ActionConfig(on_target_probability=1),shot_config=ShotConfig(block_probability=1))
         match.set_possession('a','a-3',location=Location(.9,.5))
         match.set_possession('h','h-9',location=Location(.8,.5))
-        with patch('fm95.match.rebound_endpoint',return_value=(1.01,.5)):
+        with patch('fm95.match.engine.rebound_endpoint',return_value=(1.01,.5)):
             match._play_shot(match.possession,match._active_team('h'),match._active_team('a'),Pressure(None,None,0))
         goal=next(e for e in match.events if e.kind=='goal')
         self.assertEqual((goal.player_id,goal.deflector_id),('h-9','a-3'))

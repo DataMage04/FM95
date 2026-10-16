@@ -1,18 +1,18 @@
-from fm95.offside import OffsideConfig
+from fm95.match.mechanics.offside import OffsideConfig
 from dataclasses import replace
 import unittest
 
-from fm95.actions import ActionConfig, shot_probabilities
-from fm95.attributes import Attributes
-from fm95.batch import run_match, run_batch
-from fm95.boundaries import Boundary, BoundaryExit, OutOfPlayConfig
-from fm95.crossing import CrossConfig, can_cross, delivery_chance, aerial_chance
-from fm95.defending import DefenseConfig
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig, shot_probabilities
+from fm95.players.attributes import Attributes
+from fm95.match.simulation import run_match, run_batch
+from fm95.match.mechanics.boundaries import Boundary, BoundaryExit, OutOfPlayConfig
+from fm95.match.mechanics.crossing import CrossConfig, can_cross, delivery_chance, aerial_chance
+from fm95.match.mechanics.defending import DefenseConfig
+from fm95.players.demo import demo_team
 from fm95.match import Match
-from fm95.pitch import Direction, Location, Zone
-from fm95.shooting import ShotConfig
-from fm95.goalkeeping import KeeperCrossConfig
+from fm95.match.spatial.pitch import Direction, Location, Zone
+from fm95.match.mechanics.shooting import ShotConfig
+from fm95.match.mechanics.goalkeeping import KeeperCrossConfig
 
 
 class CrossingTests(unittest.TestCase):

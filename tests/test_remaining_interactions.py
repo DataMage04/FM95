@@ -1,12 +1,12 @@
 from dataclasses import replace
 import unittest
-from fm95.demo import demo_team
+from fm95.players.demo import demo_team
 from fm95.match import Match,Phase
-from fm95.actions import ActionConfig
-from fm95.injuries import InjuryConfig
-from fm95.pitch import Location
-from fm95.defending import Pressure
-from fm95.offside import OffsideConfig
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.systems.injuries import InjuryConfig
+from fm95.match.spatial.pitch import Location
+from fm95.match.mechanics.defending import Pressure
+from fm95.match.mechanics.offside import OffsideConfig
 
 class RemainingInteractionTests(unittest.TestCase):
     def make_match(self,screening=False):

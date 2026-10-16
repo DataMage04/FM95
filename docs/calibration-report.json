@@ -12,7 +12,7 @@
   "independent_seed": 9000,
   "baseline_loss": 1.1994282935543104,
   "calibrated_loss": 0.13654224791207947,
-  "loss_definition": "RMS of scaled mean errors across 10 declared metrics; floors documented in fm95.calibration.loss; descriptive, not a statistical pass threshold",
+  "loss_definition": "RMS of scaled mean errors across 10 declared metrics; floors documented in fm95.analysis.calibration.loss; descriptive, not a statistical pass threshold",
   "comparisons": {
     "goals": {
       "real_holdout": {

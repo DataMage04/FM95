@@ -1,11 +1,11 @@
 import unittest
 from dataclasses import replace
 
-from fm95.attacking import AttackConfig, attacking_targets
-from fm95.demo import demo_team
+from fm95.match.mechanics.attacking import AttackConfig, attacking_targets
+from fm95.players.demo import demo_team
 from fm95.match import Match
-from fm95.pitch import Direction, Location
-from fm95.roles import Duty
+from fm95.match.spatial.pitch import Direction, Location
+from fm95.match.systems.roles import Duty
 
 
 class AttackingMovementTests(unittest.TestCase):

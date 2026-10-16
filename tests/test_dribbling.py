@@ -1,15 +1,15 @@
-from fm95.boundaries import OutOfPlayConfig
+from fm95.match.mechanics.boundaries import OutOfPlayConfig
 from dataclasses import replace
 from random import Random
 import unittest
 
-from fm95.actions import ActionConfig, choose_action, dribble_success_chance, resolve_dribble
-from fm95.attributes import Attributes
-from fm95.recovery import RecoveryConfig
-from fm95.batch import run_match
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig, choose_action, dribble_success_chance, resolve_dribble
+from fm95.players.attributes import Attributes
+from fm95.match.mechanics.recovery import RecoveryConfig
+from fm95.match.simulation import run_match
+from fm95.players.demo import demo_team
 from fm95.match import Match, Possession
-from fm95.pitch import Direction, Zone
+from fm95.match.spatial.pitch import Direction, Zone
 
 
 class DribblingTests(unittest.TestCase):

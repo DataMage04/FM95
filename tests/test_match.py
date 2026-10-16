@@ -2,9 +2,9 @@ import unittest
 
 from fm95.match import Match, Phase, Team
 from main import demo_team
-from fm95.actions import ActionConfig
-from fm95.crossing import CrossConfig
-from fm95.set_pieces import SetPieceConfig
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.mechanics.crossing import CrossConfig
+from fm95.match.mechanics.set_pieces import SetPieceConfig
 
 
 class MatchTests(unittest.TestCase):

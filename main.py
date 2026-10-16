@@ -1,11 +1,11 @@
 """Run the FM95 match demo: python main.py."""
 
 from fm95.match import Match
-from fm95.demo import demo_team
-from fm95.batch import run_match
-from fm95.tactics import preset
-from fm95.injuries import InjuryConfig
-from fm95.substitution_policy import AutoSubstitutionConfig
+from fm95.players.demo import demo_team
+from fm95.match.simulation import run_match
+from fm95.match.tactics import preset
+from fm95.match.systems.injuries import InjuryConfig
+from fm95.match.systems.substitution_policy import AutoSubstitutionConfig
 
 
 def halftime_changes(match):

@@ -1,12 +1,12 @@
 import unittest
 from unittest.mock import patch
 
-from fm95.defending import Pressure
-from fm95.demo import demo_team
+from fm95.match.mechanics.defending import Pressure
+from fm95.players.demo import demo_team
 from fm95.match import Match, Phase, Restart
-from fm95.pitch import Location
-from fm95.set_pieces import penalty_mark
-from fm95.set_piece_positions import clear_attacking_wall
+from fm95.match.spatial.pitch import Location
+from fm95.match.mechanics.set_pieces import penalty_mark
+from fm95.match.systems.set_piece_positions import clear_attacking_wall
 
 
 class SetPiecePositionTests(unittest.TestCase):

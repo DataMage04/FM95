@@ -3,18 +3,18 @@ from random import Random
 import unittest
 from unittest.mock import patch
 
-from fm95.actions import ActionConfig, pass_completion_chance, resolve_pass
-from fm95.batch import run_batch
-from fm95.boundaries import Boundary, BoundaryExit, OutOfPlayConfig
-from fm95.crossing import CrossConfig
-from fm95.defending import DefenseConfig, Pressure
-from fm95.demo import demo_team
-from fm95.fatigue import FatigueConfig
+from fm95.match.mechanics.actions import ActionConfig, pass_completion_chance, resolve_pass
+from fm95.match.simulation import run_batch
+from fm95.match.mechanics.boundaries import Boundary, BoundaryExit, OutOfPlayConfig
+from fm95.match.mechanics.crossing import CrossConfig
+from fm95.match.mechanics.defending import DefenseConfig, Pressure
+from fm95.players.demo import demo_team
+from fm95.match.systems.fatigue import FatigueConfig
 from fm95.match import Match, Phase, Possession
-from fm95.offside import OffsideConfig
-from fm95.pitch import Direction, Location, Zone
-from fm95.tactics import TeamTactics, action_interval, action_preferences, preference, preset
-from fm95.through_balls import ThroughBallConfig
+from fm95.match.mechanics.offside import OffsideConfig
+from fm95.match.spatial.pitch import Direction, Location, Zone
+from fm95.match.tactics import TeamTactics, action_interval, action_preferences, preference, preset
+from fm95.match.mechanics.through_balls import ThroughBallConfig
 
 
 class TacticsTests(unittest.TestCase):
@@ -193,7 +193,7 @@ class TacticsTests(unittest.TestCase):
         self.assertTrue(found)
         match = self.make_match(TeamTactics(passing_directness=1), TeamTactics(passing_directness=1), interval=1)
         match.award_out_of_play(BoundaryExit(Boundary.TOP, Location(.2, 1)), "h", "h-6")
-        with patch("fm95.match.resolve_pass", wraps=resolve_pass) as resolver:
+        with patch("fm95.match.engine.resolve_pass", wraps=resolve_pass) as resolver:
             match.step()
         self.assertEqual(resolver.call_args.kwargs["directness"], .5)
 

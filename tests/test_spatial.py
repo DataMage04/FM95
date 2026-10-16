@@ -1,12 +1,12 @@
-from fm95.boundaries import OutOfPlayConfig
+from fm95.match.mechanics.boundaries import OutOfPlayConfig
 import unittest
 
-from fm95.actions import ActionConfig
-from fm95.recovery import RecoveryConfig
-from fm95.batch import run_match
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.mechanics.recovery import RecoveryConfig
+from fm95.match.simulation import run_match
+from fm95.players.demo import demo_team
 from fm95.match import Match, Possession
-from fm95.pitch import Direction, Location, Pitch, Zone
+from fm95.match.spatial.pitch import Direction, Location, Pitch, Zone
 
 
 class SpatialTests(unittest.TestCase):

@@ -3,11 +3,11 @@ from dataclasses import replace
 from random import Random
 import unittest
 
-from fm95.actions import ActionConfig, resolve_pass
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig, resolve_pass
+from fm95.players.demo import demo_team
 from fm95.match import Match, Player, Possession, Team
-from fm95.pitch import Direction, Zone
-from fm95.positions import Position, involvement_weight, operating_zone
+from fm95.match.spatial.pitch import Direction, Zone
+from fm95.match.spatial.positions import Position, involvement_weight, operating_zone
 
 
 class PositionTests(unittest.TestCase):

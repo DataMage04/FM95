@@ -50,11 +50,11 @@ Attribute sensitivity checks verify bounded, monotonic fixed-context responses. 
 
 ```sh
 python tools/build_calibration_data.py
-python -m fm95.calibration --baseline --matches 100 --seed 9000 > baseline.json
-python -m fm95.calibration --matches 100 --seed 9000 > fitted.json
+python -m fm95.analysis.calibration --baseline --matches 100 --seed 9000 > baseline.json
+python -m fm95.analysis.calibration --matches 100 --seed 9000 > fitted.json
 python tools/report_calibration.py --baseline baseline.json --calibrated fitted.json
-python -m fm95.batch --profile pl2015 --matches 20 --seed 95 --json
-python -m fm95.validation --profile pl2015 --matches 8 --seed 5000 --json
+python -m fm95.match.simulation --profile pl2015 --matches 20 --seed 95 --json
+python -m fm95.analysis.validation --profile pl2015 --matches 8 --seed 5000 --json
 ```
 
 The source revision and per-event-file hashes are pinned in data/calibration/targets.json. Raw events and per-match source summaries stay in the ignored local cache; only aggregate analysis and a hash manifest are tracked. See the upstream [StatsBomb terms](https://github.com/hudl/open-data/blob/master/LICENSE.pdf); this is an analysis/research profile and is not a grant of commercial data rights.

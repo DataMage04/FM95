@@ -1,16 +1,16 @@
-from fm95.set_pieces import SetPieceConfig
-from fm95.offside import OffsideConfig
-from fm95.boundaries import OutOfPlayConfig
+from fm95.match.mechanics.set_pieces import SetPieceConfig
+from fm95.match.mechanics.offside import OffsideConfig
+from fm95.match.mechanics.boundaries import OutOfPlayConfig
 from dataclasses import replace
 import unittest
 
-from fm95.actions import ActionConfig
-from fm95.recovery import RecoveryConfig
-from fm95.crossing import CrossConfig
-from fm95.batch import run_match
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.mechanics.recovery import RecoveryConfig
+from fm95.match.mechanics.crossing import CrossConfig
+from fm95.match.simulation import run_match
+from fm95.players.demo import demo_team
 from fm95.match import Match, Phase
-from fm95.pitch import CENTRE
+from fm95.match.spatial.pitch import CENTRE
 
 
 class FoulTests(unittest.TestCase):

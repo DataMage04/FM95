@@ -6,8 +6,8 @@ home-and-away fixture list, runs fixtures through the same `Match` implementatio
 stores full-time scores and match statistics, and calculates a table.
 
 ```python
-from fm95.demo import demo_team
-from fm95.season import Season
+from fm95.players.demo import demo_team
+from fm95.competition.season import Season
 
 clubs = [demo_team("north", "North"), demo_team("south", "South")]
 season = Season("2026/27", clubs, seed=95)
@@ -42,7 +42,7 @@ same variability model or realism as Football Manager.
 Automated coverage lives in `tests/test_season.py` and checks even and odd league
 schedules, deterministic fixture seeds, match execution and replay, matchday
 progression, duplicate-result protection, and result/table reconciliation.
-For a full-season acceptance run, execute `python -m fm95.season_validation
+For a full-season acceptance run, execute `python -m fm95.competition.validation
 --clubs 4 --seed 95 --json`. The checked-in
 [`milestone3-validation.json`](milestone3-validation.json) records the four-club
 run. This checks end-to-end consistency and deterministic execution, not match

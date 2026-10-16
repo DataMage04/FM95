@@ -2,18 +2,18 @@ from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
-from fm95.actions import ActionConfig, PassResult
-from fm95.batch import run_batch, run_match
-from fm95.boundaries import OutOfPlayConfig
-from fm95.crossing import CrossConfig
-from fm95.defending import DefenseConfig, Pressure
-from fm95.demo import demo_team
-from fm95.goalkeeping import KeeperCrossConfig
+from fm95.match.mechanics.actions import ActionConfig, PassResult
+from fm95.match.simulation import run_batch, run_match
+from fm95.match.mechanics.boundaries import OutOfPlayConfig
+from fm95.match.mechanics.crossing import CrossConfig
+from fm95.match.mechanics.defending import DefenseConfig, Pressure
+from fm95.players.demo import demo_team
+from fm95.match.mechanics.goalkeeping import KeeperCrossConfig
 from fm95.match import Match, Restart, Phase
-from fm95.offside import OffsideConfig, snapshot
-from fm95.pitch import Direction, Location, Zone
-from fm95.recovery import RecoveryConfig
-from fm95.through_balls import ThroughBallConfig
+from fm95.match.mechanics.offside import OffsideConfig, snapshot
+from fm95.match.spatial.pitch import Direction, Location, Zone
+from fm95.match.mechanics.recovery import RecoveryConfig
+from fm95.match.mechanics.through_balls import ThroughBallConfig
 
 
 class OffsideTests(unittest.TestCase):
@@ -44,7 +44,7 @@ class OffsideTests(unittest.TestCase):
     def play_pass(self, match, completed=True):
         team = match.pending_restart.team_id if match.pending_restart else match.possession.team_id
         other = "a" if team == "h" else "h"
-        with patch("fm95.match.resolve_pass", return_value=PassResult(
+        with patch("fm95.match.engine.resolve_pass", return_value=PassResult(
                 f"{team}-9", Zone(2, 1), completed, None if completed else f"{other}-3", 1 if completed else 0)):
             match.step()
 

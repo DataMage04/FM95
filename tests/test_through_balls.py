@@ -1,17 +1,17 @@
-from fm95.offside import OffsideConfig
+from fm95.match.mechanics.offside import OffsideConfig
 import json
 import unittest
 
-from fm95.actions import ActionConfig
-from fm95.batch import run_batch
-from fm95.boundaries import OutOfPlayConfig
-from fm95.crossing import CrossConfig
-from fm95.defending import DefenseConfig
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.simulation import run_batch
+from fm95.match.mechanics.boundaries import OutOfPlayConfig
+from fm95.match.mechanics.crossing import CrossConfig
+from fm95.match.mechanics.defending import DefenseConfig
+from fm95.players.demo import demo_team
 from fm95.match import Match
-from fm95.pitch import Direction, Location, Pitch
-from fm95.recovery import RecoveryConfig
-from fm95.through_balls import ThroughBallConfig, completion_chance, forward_runs
+from fm95.match.spatial.pitch import Direction, Location, Pitch
+from fm95.match.mechanics.recovery import RecoveryConfig
+from fm95.match.mechanics.through_balls import ThroughBallConfig, completion_chance, forward_runs
 
 
 class ThroughBallTests(unittest.TestCase):

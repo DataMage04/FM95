@@ -5,13 +5,13 @@ import unittest
 from random import Random
 from unittest.mock import patch
 
-from fm95.actions import ActionConfig, resolve_dribble
-from fm95.calibration import load_profile, profile_configs
-from fm95.crossing import CrossConfig
-from fm95.defending import DefenseConfig
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig, resolve_dribble
+from fm95.analysis.calibration import load_profile, profile_configs
+from fm95.match.mechanics.crossing import CrossConfig
+from fm95.match.mechanics.defending import DefenseConfig
+from fm95.players.demo import demo_team
 from fm95.match import Match, Possession
-from fm95.pitch import Location, Direction, Zone
+from fm95.match.spatial.pitch import Location, Direction, Zone
 
 
 class CalibrationTests(unittest.TestCase):

@@ -2,16 +2,16 @@ from dataclasses import FrozenInstanceError
 import unittest
 from unittest.mock import patch
 
-from fm95.actions import ActionConfig
-from fm95.boundaries import Boundary, BoundaryExit, OutOfPlayConfig
-from fm95.crossing import CrossConfig
-from fm95.defending import DefenseConfig, Pressure
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.match.mechanics.boundaries import Boundary, BoundaryExit, OutOfPlayConfig
+from fm95.match.mechanics.crossing import CrossConfig
+from fm95.match.mechanics.defending import DefenseConfig, Pressure
+from fm95.players.demo import demo_team
 from fm95.match import Match, Phase, Restart
-from fm95.pitch import Location
-from fm95.recovery import RecoveryConfig
-from fm95.restart_rules import RestartContext, indirect_location
-from fm95.shooting import ShotConfig
+from fm95.match.spatial.pitch import Location
+from fm95.match.mechanics.recovery import RecoveryConfig
+from fm95.match.mechanics.restart_rules import RestartContext, indirect_location
+from fm95.match.mechanics.shooting import ShotConfig
 
 
 class RestartRuleTests(unittest.TestCase):
@@ -143,7 +143,7 @@ class RestartRuleTests(unittest.TestCase):
         point = Location(.5,.5)
         match._possession = None
         match._pending_restart = Restart('throw_in','h','h-7',point.zone,point)
-        with patch('fm95.match.misplaced_endpoint',return_value=(1.1,.5)):
+        with patch('fm95.match.engine.misplaced_endpoint',return_value=(1.1,.5)):
             match._play_action()
         self.assertEqual(match.home_goals,0)
         self.assertEqual(match.pending_restart.kind,'goal_kick')

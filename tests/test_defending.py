@@ -1,15 +1,15 @@
-from fm95.boundaries import OutOfPlayConfig
+from fm95.match.mechanics.boundaries import OutOfPlayConfig
 from dataclasses import replace
 import unittest
 
-from fm95.actions import ActionConfig, pass_completion_chance, shot_probabilities, press_win_chance
-from fm95.batch import run_match, run_batch
-from fm95.defending import (DefenseConfig, defensive_targets, goal_side,
+from fm95.match.mechanics.actions import ActionConfig, pass_completion_chance, shot_probabilities, press_win_chance
+from fm95.match.simulation import run_match, run_batch
+from fm95.match.mechanics.defending import (DefenseConfig, defensive_targets, goal_side,
                             measure_pressure, move_towards)
-from fm95.demo import demo_team
-from fm95.recovery import RecoveryConfig
+from fm95.players.demo import demo_team
+from fm95.match.mechanics.recovery import RecoveryConfig
 from fm95.match import Match, Phase
-from fm95.pitch import Direction, Location, Pitch, Zone
+from fm95.match.spatial.pitch import Direction, Location, Pitch, Zone
 
 
 class DefendingTests(unittest.TestCase):

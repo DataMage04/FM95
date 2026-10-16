@@ -12,30 +12,73 @@ Python 3.10 or newer; no external runtime dependencies.
 ```sh
 python main.py
 python -m unittest discover -s tests -v
-python -m fm95.batch --matches 2 --seed 95 --json
-python -m fm95.validation --matches 8 --seed 95 --json
+python -m fm95.match.simulation --matches 2 --seed 95 --json
+python -m fm95.analysis.validation --matches 8 --seed 95 --json
 ```
 
 The demo uses synthetic equal-ability teams, different tactical instructions,
 automatic substitutions, and opt-in injury generation. It prints sample actions,
-shots, restarts, substitutions, and statistics. The current regression suite has
-**319 tests**.
+shots, restarts, substitutions, and statistics. The regression suite has
+**341 tests**.
+
+## Code layout
+
+Simulation code is grouped by domain rather than kept as a flat list of modules:
+
+```text
+fm95/
+  match/
+    engine.py
+    simulation.py
+    spatial/       # pitch geometry and player positions
+    mechanics/     # actions, movement, defending, shooting, rules, and restarts
+    systems/       # fatigue, injuries, substitutions, treatment, and timekeeping
+  players/         # player data, decisions, squad generation, demo squads
+  competition/    # seasons, fixtures, results, and standings
+  analysis/       # calibration and integrated validation
+```
+
+The match lifecycle is in `fm95.match.engine`; individual mechanics and match
+systems stay in their own modules. `fm95.match` re-exports the main match types
+(`Match`, `Team`, `Player`, and `Phase`) for convenient imports.
+
+## Run and test features
+
+Run commands from the repository root. These examples exercise the current
+engine, player differentiation, optional match systems, season loop, and checks:
+
+| Feature | Command | What it exercises |
+| --- | --- | --- |
+| Local demo | `python main.py` | A match with sample actions, restarts, substitutions, and statistics |
+| Reproducible batch | `python -m fm95.match.simulation --matches 20 --seed 95 --json` | Seeded matches and aggregate outcomes/statistics |
+| Player differences | `python -m fm95.match.simulation --generated-squads --home-strength .7 --away-strength .3 --decision-strength .7 --matches 20 --seed 95 --json` | Synthetic player attributes, tendencies, and stronger/weaker squads |
+| Tactical styles | `python -m fm95.match.simulation --matches 2 --home-style pressing --away-style direct --json` | Different team instructions in the same match setup |
+| Optional match systems | `python -m fm95.match.simulation --matches 2 --seed 95 --added-time --woodwork --temporary-injuries --off-ball-offside --auto-substitutions --json` | Added time, woodwork, treatment, offside screening, and automatic substitutions |
+| Full season | `python -m fm95.competition.validation --clubs 4 --seed 95 --json` | Fixture generation, ordered matchdays, results, and final standings |
+| Integrated match validation | `python -m fm95.analysis.validation --matches 8 --seed 95 --generated-squads --decision-strength .8 --json` | State/statistic checks and exact seeded replays across configured scenarios |
+| All automated tests | `python -m unittest discover -s tests -v` | The complete regression suite (341 tests) |
+| Available match switches | `python -m fm95.match.simulation --help` | Options for isolating or combining match features |
+
+For the opt-in aggregate research profile, run
+`python -m fm95.match.simulation --profile pl2015 --matches 20 --seed 95 --json`.
+See [the calibration guide](docs/calibration.md) for its data, fitting procedure,
+and limitations.
 
 A batch defaults to balanced tactics with automatic management and random injuries
 disabled. Enable those features explicitly:
 
 ```sh
-python -m fm95.batch --matches 2 --injuries --auto-substitutions --json
-python -m fm95.batch --matches 2 --home-style pressing --away-style direct --json
+python -m fm95.match.simulation --matches 2 --injuries --auto-substitutions --json
+python -m fm95.match.simulation --matches 2 --home-style pressing --away-style direct --json
 ```
 
 The example styles are `balanced`, `pressing`, `possession`, and `direct`. They are
 provisional configurations for exploring behavior, not validated tactical advice.
-Use `python -m fm95.batch --help` for isolation switches. Optional cumulative
+Use `python -m fm95.match.simulation --help` for isolation switches. Optional cumulative
 features can be exercised together:
 
 ```sh
-python -m fm95.batch --matches 2 --seed 95 --added-time --woodwork --temporary-injuries --off-ball-offside --auto-substitutions --json
+python -m fm95.match.simulation --matches 2 --seed 95 --added-time --woodwork --temporary-injuries --off-ball-offside --auto-substitutions --json
 ```
 
 ## Implemented foundations
@@ -124,9 +167,9 @@ are bounded and preserve forced 0/1 settings used for deterministic scenarios.
 `crossing`, `dribbling`, `shooting`, and `through_balls`.
 
 ```python
-from fm95.demo import demo_team
+from fm95.players.demo import demo_team
 from fm95.match import Match
-from fm95.tactics import TeamTactics
+from fm95.match.tactics import TeamTactics
 
 match = Match(
     demo_team("home", "Home", include_bench=True),
@@ -155,8 +198,8 @@ Reduced teams use reduced assignments. Formation changes move targets gradually,
 preserve ball/restart state, and emit `formation_changed` events.
 
 ```python
-from fm95.positions import Position
-from fm95.roles import Duty
+from fm95.match.spatial.positions import Position
+from fm95.match.systems.roles import Duty
 
 assignments = match.formation("home")
 assignments["home-6"] = Position.AM
@@ -339,15 +382,15 @@ trials are recorded. The frozen profile and prototype were then each evaluated
 on 100 independent simulation seeds (9000–9099).
 
 ```sh
-python -m fm95.batch --profile pl2015 --matches 20 --seed 95 --json
-python -m fm95.calibration --matches 100 --seed 9000 > fitted.json
-python -m fm95.validation --profile pl2015 --matches 8 --seed 5000 --json
+python -m fm95.match.simulation --profile pl2015 --matches 20 --seed 95 --json
+python -m fm95.analysis.calibration --matches 100 --seed 9000 > fitted.json
+python -m fm95.analysis.validation --profile pl2015 --matches 8 --seed 5000 --json
 ```
 
 The profile enables added time, woodwork and automatic substitutions, matching
 its fitting setup. Other feature/isolation flags still work. Defaults remain
 available with `--profile prototype`. Python callers can pass
-`**profile_configs(load_profile())` from `fm95.calibration` into `Match`, alongside
+`**profile_configs(load_profile())` from `fm95.analysis.calibration` into `Match`, alongside
 those three feature configurations.
 
 | Totals per match | Real holdout | Prototype | Fitted profile |
@@ -390,7 +433,7 @@ position aptitudes for goalkeepers, defenders, fullbacks, midfielders, creators,
 wingers and strikers. It stores no overall rating.
 
 ```sh
-python -m fm95.batch --generated-squads --home-strength .7 --away-strength .3 --decision-strength .7 --matches 20 --seed 95 --json
+python -m fm95.match.simulation --generated-squads --home-strength .7 --away-strength .3 --decision-strength .7 --matches 20 --seed 95 --json
 ```
 
 The seed and player identifiers determine each player's attributes, so rerunning the
@@ -409,7 +452,7 @@ temporary treatment and return, dismissal, added time, woodwork, off-ball screen
 low/high synthetic team strengths, statistical reconciliation and exact seeded replay:
 
 ```sh
-python -m fm95.validation --matches 8 --seed 95 --generated-squads --decision-strength .8 --json
+python -m fm95.analysis.validation --matches 8 --seed 95 --generated-squads --decision-strength .8 --json
 ```
 
 The checked-in [Milestone 2 validation report](docs/milestone2-validation.json) records
@@ -463,8 +506,8 @@ resumed, while completed results cannot be overwritten. The competition layer
 does not add persistence, transfers or a user interface.
 
 ```python
-from fm95.demo import demo_team
-from fm95.season import Season
+from fm95.players.demo import demo_team
+from fm95.competition.season import Season
 
 clubs = [demo_team("north", "North"), demo_team("south", "South")]
 season = Season("2026/27", clubs, seed=95)
@@ -478,6 +521,6 @@ limitations. Persistence, transfers, broader club management and a GUI remain
 future work; the competition layer is in memory and reuses the engine's seeded
 pseudo-random behavior for repeatable fixture simulation.
 
-Run the full-season acceptance check with `python -m fm95.season_validation
+Run the full-season acceptance check with `python -m fm95.competition.validation
 --clubs 4 --seed 95 --json`; its recorded output is in
 [docs/milestone3-validation.json](docs/milestone3-validation.json).

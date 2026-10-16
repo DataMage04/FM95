@@ -1,10 +1,10 @@
 import unittest
 from dataclasses import replace
 
-from fm95.demo import demo_team
+from fm95.players.demo import demo_team
 from fm95.match import Match, Phase, Restart
-from fm95.pitch import Direction, Location, Pitch
-from fm95.restart_positions import clear_distance, restart_positions
+from fm95.match.spatial.pitch import Direction, Location, Pitch
+from fm95.match.systems.restart_positions import clear_distance, restart_positions
 
 
 class RestartPositionTests(unittest.TestCase):

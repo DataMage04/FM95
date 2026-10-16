@@ -2,18 +2,18 @@ from dataclasses import replace
 from random import Random
 import unittest
 
-from fm95.actions import ActionConfig
-from fm95.attributes import Attributes
-from fm95.batch import run_batch, run_match
-from fm95.boundaries import OutOfPlayConfig
-from fm95.crossing import CrossConfig
-from fm95.defending import DefenseConfig
-from fm95.demo import demo_team
+from fm95.match.mechanics.actions import ActionConfig
+from fm95.players.attributes import Attributes
+from fm95.match.simulation import run_batch, run_match
+from fm95.match.mechanics.boundaries import OutOfPlayConfig
+from fm95.match.mechanics.crossing import CrossConfig
+from fm95.match.mechanics.defending import DefenseConfig
+from fm95.players.demo import demo_team
 from fm95.match import Match, Phase, Team
-from fm95.pitch import Direction, Location, Pitch
-from fm95.set_pieces import SetPieceConfig, can_shoot_free_kick, penalty_mark, resolve_set_piece
-from fm95.shooting import ShotConfig
-from fm95.through_balls import ThroughBallConfig
+from fm95.match.spatial.pitch import Direction, Location, Pitch
+from fm95.match.mechanics.set_pieces import SetPieceConfig, can_shoot_free_kick, penalty_mark, resolve_set_piece
+from fm95.match.mechanics.shooting import ShotConfig
+from fm95.match.mechanics.through_balls import ThroughBallConfig
 
 
 class SetPieceTests(unittest.TestCase):

@@ -1,11 +1,11 @@
-from fm95.boundaries import OutOfPlayConfig
+from fm95.match.mechanics.boundaries import OutOfPlayConfig
 import unittest
 from random import Random
 
-from fm95.actions import ActionConfig, resolve_pass
-from fm95.recovery import RecoveryConfig
+from fm95.match.mechanics.actions import ActionConfig, resolve_pass
+from fm95.match.mechanics.recovery import RecoveryConfig
 from fm95.match import Match, Phase, Possession
-from fm95.pitch import Direction, Zone
+from fm95.match.spatial.pitch import Direction, Zone
 from main import demo_team
 
 
