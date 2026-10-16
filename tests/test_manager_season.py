@@ -75,6 +75,7 @@ class ManagerSeasonTests(unittest.TestCase):
             data = json.loads(path.read_text())
             data["version"] = 1
             data.pop("manager")
+            data.pop("squad")
             for club in data["teams"]:
                 players = club.pop("players")
                 lineup_ids = set(club.pop("default_lineup_ids"))

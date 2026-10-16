@@ -106,7 +106,10 @@ class ManagerCLI:
             self.output("4. View fixtures and results")
             self.output("5. Save career")
             self.output("6. Return to main menu")
-            choice = self._ask_choice("Choose: ", {"1", "2", "3", "4", "5", "6"})
+            self.output("7. Transfer market")
+            self.output("8. View contracts / renew a contract")
+            self.output("9. Transfer history")
+            choice = self._ask_choice("Choose: ", {"1", "2", "3", "4", "5", "6", "7", "8", "9"})
             if choice == "1":
                 self._play_next_matchday()
             elif choice == "2":
@@ -117,6 +120,12 @@ class ManagerCLI:
                 self._show_fixtures()
             elif choice == "5":
                 self._save_career()
+            elif choice == "7":
+                self._transfer_market()
+            elif choice == "8":
+                self._show_contracts()
+            elif choice == "9":
+                self._show_transfer_history()
             else:
                 return
 
@@ -189,6 +198,85 @@ class ManagerCLI:
             status = "Starting XI" if player.id in selected else "Substitute"
             self.output(f"{player.name:<25} {player.position.value:<3} {status}")
         self.output("You can change the XI when preparing your next fixture.")
+
+    def _transfer_market(self) -> None:
+        assert self.session is not None
+        operations = self.session.squad_operations
+        window, completed = operations.current_window(self.session.season)
+        club = self.session.manager_club
+        budget = operations.budgets[club.id]
+        self.output(f"\nTransfer market — {window or 'window closed'}; "
+                    f"{completed} matchdays complete; transfer budget {budget:,}")
+        if window is None:
+            self.output("Transfers are available before matchday 1 and at the mid-season break.")
+            return
+        targets = self.session.transfer_targets()
+        if not targets:
+            self.output("No players are available from other clubs.")
+            return
+        self.output(" #  Player                     Pos  Club")
+        for index, (selling_club, player) in enumerate(targets, 1):
+            self.output(f"{index:>2}. {player.name:<25} {player.position.value:<4} {selling_club.name}")
+        raw = self.input("Player number to sign, or Enter to return: ").strip()
+        if not raw:
+            return
+        try:
+            index = int(raw)
+            if not 1 <= index <= len(targets):
+                raise ValueError(f"Choose a number from 1 to {len(targets)}.")
+            player = targets[index - 1][1]
+            fee = self._ask_integer("Transfer fee [0]: ", default=0, minimum=0)
+            duration = self._ask_integer("Contract length in seasons [3]: ", default=3,
+                                         minimum=1, maximum=5)
+            record = self.session.make_transfer(player.id, fee=fee, contract_seasons=duration)
+            self.output(f"Signed {record.player_name} from {targets[index - 1][0].name} "
+                        f"for {record.fee:,}; contract through season {duration}.")
+            self._autosave_squad_change()
+        except (TypeError, ValueError) as exc:
+            self.output(f"Transfer not completed: {exc}")
+
+    def _show_contracts(self) -> None:
+        assert self.session is not None
+        club = self.session.manager_club
+        operations = self.session.squad_operations
+        self.output(f"\nContracts — {club.name}")
+        for index, player in enumerate(club.players, 1):
+            contract = operations.contracts[player.id]
+            self.output(f"{index:2}. {player.name:<25} through season {contract.end_season}")
+        raw = self.input("Player number to renew, or Enter to return: ").strip()
+        if not raw:
+            return
+        try:
+            index = int(raw)
+            if not 1 <= index <= len(club.players):
+                raise ValueError(f"Choose a number from 1 to {len(club.players)}.")
+            player = club.players[index - 1]
+            seasons = self._ask_integer("New contract length in seasons [3]: ", default=3,
+                                        minimum=1, maximum=5)
+            contract = self.session.renew_contract(player.id, seasons=seasons)
+            self.output(f"{player.name} is contracted through season {contract.end_season}.")
+            self._autosave_squad_change()
+        except (TypeError, ValueError) as exc:
+            self.output(f"Contract not updated: {exc}")
+
+    def _show_transfer_history(self) -> None:
+        assert self.session is not None
+        history = self.session.squad_operations.history
+        self.output("\nTransfer history")
+        if not history:
+            self.output("No transfers have been completed.")
+            return
+        clubs = {club.id: club.name for club in self.session.season.teams}
+        for record in history:
+            self.output(f"Season {record.season}, {record.window}: {record.player_name} — "
+                        f"{clubs[record.from_club_id]} → {clubs[record.to_club_id]} "
+                        f"({record.fee:,})")
+
+    def _autosave_squad_change(self) -> None:
+        assert self.session is not None
+        if self.session.save_path is not None:
+            self.session.save()
+            self.output(f"Autosaved: {self.session.save_path}")
 
     def _show_table(self) -> None:
         assert self.session is not None

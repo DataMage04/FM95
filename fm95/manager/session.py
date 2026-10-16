@@ -78,7 +78,12 @@ class ManagerSession:
                 continue
             lineup = result.home_lineup if fixture.home_team_id == self.manager_team_id else result.away_lineup
             if lineup:
-                return SquadSelection(lineup)
+                selection = SquadSelection(lineup)
+                try:
+                    self.manager_club.to_team(selection)
+                    return selection
+                except ValueError:
+                    break
         return self.season.manager_assignment.selection
 
     @property
@@ -90,6 +95,24 @@ class ManagerSession:
             return (result.home_tactics if fixture.home_team_id == self.manager_team_id
                     else result.away_tactics)
         return self.season.manager_assignment.tactics
+
+    @property
+    def squad_operations(self):
+        return self.season.squad_operations
+
+    def transfer_targets(self):
+        """Return registered players at other clubs, in stable display order."""
+        return tuple((club, player) for club in self.season.teams
+                     if club.id != self.manager_team_id
+                     for player in club.players)
+
+    def make_transfer(self, player_id: str, *, fee: int, contract_seasons: int = 3):
+        return self.squad_operations.complete_transfer(
+            self.season, player_id, fee=fee, contract_seasons=contract_seasons
+        )
+
+    def renew_contract(self, player_id: str, *, seasons: int):
+        return self.squad_operations.renew_contract(self.season, player_id, seasons=seasons)
 
     def play_next_matchday(self, *, selection: SquadSelection | None = None,
                            tactics: TeamTactics | None = None) -> tuple[FixtureResult, ...]:

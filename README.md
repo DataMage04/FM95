@@ -21,7 +21,9 @@ Start a career, choose a club, then use the menus to set your starting XI and
 tactics before playing each matchday. Enter 11 squad numbers separated by
 commas, or press Enter to keep the current lineup. Saves are local JSON files;
 choose **Save career** before exiting. Once saved, completed matchdays autosave.
-The load menu lists files under `saves/` and also accepts a file path.
+The load menu lists files under `saves/` and also accepts a file path. Squad
+operations include contracts and transfers during pre-season and the mid-season
+window; see the [Milestone 7 guide](docs/milestone7.md).
 
 See [the CLI guide](docs/milestone6.md) for the full prototype workflow.
 

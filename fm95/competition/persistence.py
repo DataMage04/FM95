@@ -35,12 +35,13 @@ from fm95.players.decisions import DecisionConfig, DecisionTendencies
 from fm95.players.model import Player
 from fm95.teams.model import Team
 from fm95.teams.club import Club, SquadSelection
+from fm95.squad.operations import Contract, SquadOperations, TransferRecord
 from fm95.competition.season import Fixture, FixtureResult, Season
 from fm95.competition.manager import Manager, ManagerAssignment
 
 
 SAVE_FORMAT = "fm95-season"
-SAVE_VERSION = 2
+SAVE_VERSION = 3
 
 MATCH_OPTION_TYPES = {
     "action_config": ActionConfig,
@@ -105,15 +106,15 @@ def load_season(path: str | os.PathLike) -> Season:
             data = json.load(stream)
     except json.JSONDecodeError as exc:
         raise ValueError(f"Season save is not valid JSON: {exc}") from exc
-    if not isinstance(data, dict) or set(data) not in (
-            {"format", "version", "season", "rules", "teams", "fixtures", "results", "settings"},
-            {"format", "version", "season", "rules", "teams", "fixtures", "results", "settings", "manager"}):
+    legacy_keys = {"format", "version", "season", "rules", "teams", "fixtures", "results", "settings"}
+    version3_keys = legacy_keys | {"manager", "squad"}
+    if not isinstance(data, dict) or set(data) not in (legacy_keys, legacy_keys | {"manager"}, version3_keys):
         raise ValueError("Save keys are invalid.")
     if type(data.get("version")) is int and data["version"] >= 2 and "manager" not in data:
         raise ValueError("Version 2 season saves must contain a manager field.")
     if data["format"] != SAVE_FORMAT:
         raise ValueError("File is not an FM95 season save.")
-    if type(data["version"]) is not int or data["version"] not in (1, SAVE_VERSION):
+    if type(data["version"]) is not int or data["version"] not in (1, 2, SAVE_VERSION):
         raise ValueError(f"Unsupported season save version: {data['version']!r}.")
 
     season_data = _require_object(data["season"], {"name", "seed"}, "season")
@@ -125,6 +126,9 @@ def load_season(path: str | os.PathLike) -> Season:
                     for item in _require_list(data["results"], "results"))
     settings = (_settings_from_data(data["settings"], {team.id for team in teams})
                 if data["settings"] is not None else None)
+    current_clubs = tuple(Club.from_team(team) if isinstance(team, Team) else team for team in teams)
+    squad = (_squad_operations_from_data(data["squad"], current_clubs)
+             if data["version"] >= 3 else SquadOperations(current_clubs))
     return Season._restore(
         name=season_data["name"], teams=teams, seed=season_data["seed"],
         points_for_win=rules["points_for_win"], points_for_draw=rules["points_for_draw"],
@@ -132,6 +136,7 @@ def load_season(path: str | os.PathLike) -> Season:
         run_settings=settings,
         manager_assignment=(_manager_from_data(data["manager"], {team.id: team for team in teams})
                             if data.get("manager") is not None else None),
+        squad_operations=squad,
     )
 
 
@@ -154,7 +159,37 @@ def _season_to_data(season: Season) -> dict[str, Any]:
             "tactics": {key: _config_to_data(value) for key, value in sorted(settings["tactics"].items())},
         },
         "manager": _manager_to_data(season.manager_assignment),
+        "squad": _squad_operations_to_data(season.squad_operations),
     }
+
+
+def _squad_operations_to_data(operations: SquadOperations) -> dict[str, Any]:
+    return {
+        "contracts": [asdict(operations.contracts[player_id])
+                      for player_id in sorted(operations.contracts)],
+        "budgets": dict(sorted(operations.budgets.items())),
+        "history": [asdict(record) for record in operations.history],
+    }
+
+
+def _squad_operations_from_data(data: Any, clubs: tuple[Club, ...]) -> SquadOperations:
+    item = _require_object(data, {"contracts", "budgets", "history"}, "squad operations")
+    contracts = {}
+    for raw in _require_list(item["contracts"], "contracts"):
+        contract_data = _require_object(raw,
+            {"player_id", "club_id", "start_season", "end_season"}, "contract")
+        contract = Contract(**contract_data)
+        if contract.player_id in contracts:
+            raise ValueError("Save contains duplicate player contracts.")
+        contracts[contract.player_id] = contract
+    budgets = _require_mapping(item["budgets"], "transfer budgets")
+    history = []
+    for raw in _require_list(item["history"], "transfer history"):
+        record_data = _require_object(raw,
+            {"season", "completed_matchdays", "window", "player_id", "player_name",
+             "from_club_id", "to_club_id", "fee"}, "transfer record")
+        history.append(TransferRecord(**record_data))
+    return SquadOperations(clubs, contracts=contracts, budgets=budgets, history=history)
 
 
 def _club_to_data(club: Club) -> dict[str, Any]:

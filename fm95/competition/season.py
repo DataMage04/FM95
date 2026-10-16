@@ -94,6 +94,8 @@ class Season:
         self._results: dict[str, FixtureResult] = {}
         self._run_settings: dict | None = None
         self.manager_assignment: ManagerAssignment | None = None
+        from fm95.squad.operations import SquadOperations
+        self.squad_operations = SquadOperations(self.teams)
         self.validate()
 
     def assign_manager(self, manager: Manager, team_id: str, *,
@@ -364,18 +366,22 @@ class Season:
             if not isinstance(result.home_tactics, TeamTactics) or not isinstance(result.away_tactics, TeamTactics):
                 raise ValueError(f"Result for {fixture_id} has invalid tactical choices.")
             if result.home_lineup or result.away_lineup:
+                league_players = {player.id: player for club in self.teams for player in club.players}
                 for team_id, lineup in ((fixture.home_team_id, result.home_lineup),
                                         (fixture.away_team_id, result.away_lineup)):
                     if (len(lineup) != 11 or len(set(lineup)) != 11
-                            or not set(lineup) <= {player.id for player in self._team_by_id[team_id].players}
-                            or sum(self._team_by_id[team_id]._by_id[pid].is_goalkeeper for pid in lineup) != 1):
+                            or not set(lineup) <= league_players.keys()
+                            or sum(league_players[pid].is_goalkeeper for pid in lineup) != 1):
                         raise ValueError(f"Result for {fixture_id} has an invalid saved lineup.")
+        if self.squad_operations is not None:
+            self.squad_operations.validate(self.teams)
 
     @classmethod
     def _restore(cls, *, name: str, teams: tuple[Team, ...], seed: int,
                  points_for_win: int, points_for_draw: int, points_for_loss: int,
                  fixtures: tuple[Fixture, ...], results: tuple[FixtureResult, ...],
-                 run_settings: dict | None, manager_assignment: ManagerAssignment | None = None) -> "Season":
+                 run_settings: dict | None, manager_assignment: ManagerAssignment | None = None,
+                 squad_operations=None) -> "Season":
         """Rebuild validated persisted state without regenerating or losing results."""
         season = cls(name, teams, seed=seed, points_for_win=points_for_win,
                      points_for_draw=points_for_draw, points_for_loss=points_for_loss)
@@ -386,6 +392,8 @@ class Season:
             raise ValueError("Save contains duplicate fixture results.")
         season._run_settings = run_settings
         season.manager_assignment = manager_assignment
+        if squad_operations is not None:
+            season.squad_operations = squad_operations
         season.validate()
         return season
 
