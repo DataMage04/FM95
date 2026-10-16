@@ -110,7 +110,7 @@ class ShotInteractionTests(unittest.TestCase):
         match = matches[0]
         home, away = match.statistics("h"), match.statistics("a")
         for own, opponent in ((home, away), (away, home)):
-            self.assertEqual(own.shots_on_target, own.goals+opponent.saves)
+            self.assertEqual(own.shots_on_target, own.goals-own.own_goals_received-own.deflection_goals+opponent.saves)
             self.assertEqual(own.shots_blocked, opponent.blocks)
             self.assertLessEqual(own.shots_on_target+own.shots_blocked, own.shots)
             attempts = [e for e in match.events if e.team_id == own.team_id

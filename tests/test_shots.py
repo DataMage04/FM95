@@ -1,5 +1,6 @@
 from fm95.offside import OffsideConfig
 from fm95.boundaries import OutOfPlayConfig
+from dataclasses import replace
 import unittest
 from random import Random
 
@@ -65,6 +66,8 @@ class ShotTests(unittest.TestCase):
 
     def test_second_half_shot_direction_and_no_action_on_whistle(self):
         match = self.make_match()
+        # Isolate period/shot behavior from random dismissals and abandonment.
+        match.action_config = replace(match.action_config, foul_probability=0)
         match.start()
         for _ in range(2700):
             match.step()
@@ -89,7 +92,7 @@ class ShotTests(unittest.TestCase):
                 else:
                     match.step()
             for team_id, score in (("h", match.home_goals), ("a", match.away_goals)):
-                self.assertEqual(score, sum(e.kind == "goal" and e.team_id == team_id
+                self.assertEqual(score, sum(e.kind in ("goal", "own_goal", "deflection_goal") and e.team_id == team_id
                                             for e in match.events))
             self.assertTrue(any(e.goal_probability is not None for e in match.events))
         self.assertEqual(matches[0].events, matches[1].events)

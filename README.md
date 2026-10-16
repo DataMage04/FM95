@@ -17,7 +17,7 @@ python -m fm95.batch --matches 2 --seed 95 --json
 The demo uses synthetic equal-ability teams, different tactical instructions,
 automatic substitutions, and opt-in injury generation. It prints sample actions,
 shots, restarts, substitutions, and statistics. The current regression suite has
-**233 tests**.
+**286 tests**.
 
 A batch defaults to balanced tactics with automatic management and random injuries
 disabled. Enable those features explicitly:
@@ -40,17 +40,17 @@ Use `python -m fm95.batch --help` for isolation switches.
 | Spatial state | Metric pitch geometry, precise normalized ball/player locations, formation targets, coarse 3-by-3 context zones |
 | Possession | Controlled, loose/aerial, and pending-restart states; recovery contests and possession accounting |
 | Passing | Completed, intercepted, loose, out-of-play, and offside deliveries; forward runs, through balls, and tactical long passes |
-| Defending | Closing down, basic marking, pressure, pressing challenges, tackles, dispossessions, fouls, and shot blocks |
-| Shooting | Goals, held saves, misses, parries, rebounds, and headed shots; recorded scoring probabilities and model xG |
+| Defending | Closing down, distinct marking, coordinated cover behind the press, pressure, tackles, fouls, and shot blocks |
+| Shooting | Shot goals, deflection/own goals, held saves, misses, parries, rebounds and headers; scoring probabilities and model xG |
 | Crossing | Open-play/corner deliveries, aerial contests, headers, headed clearances, keeper claims and punches |
-| Restarts | Kickoffs, throw-ins, corners, goal kicks, short/direct free kicks, penalties, indirect free kicks, and injury dropped balls |
+| Restarts | Boundary/foul/injury restarts; direct-scoring and ordinary second-touch restrictions; clearance, penalty and wall setup |
 | Offside | Position snapshots at the teammate's touch, checked at represented receptions, recoveries, and aerial challenges |
 | Discipline | Yellow cards, second yellows, straight reds, active-player exclusion, emergency keepers, minimum-player handling |
 | Substitutions | Single/grouped changes at stoppages and halftime, configurable limits/opportunities, no return substitutions |
 | Condition | Stamina-dependent depletion, represented movement costs, stoppage/halftime recovery, effective abilities and movement limits |
 | Management | Read-only fatigue recommendations and optional automatic fatigue/injury replacements |
 | Injuries | Optional open-play/foul incidents, match-ending withdrawals, replacement recommendations, short-handed play |
-| Team tactics | Independent tempo, pressing, defensive line, width, passing directness, and attacking preferences; live changes |
+| Team tactics | Independent instructions, live formations and individual duties; attacking support, defensive cover and timed turnover responses |
 | Diagnostics | Timestamped events, immutable statistics/condition snapshots, seeded batches, JSON configuration and result summaries |
 
 ## Match state and timing
@@ -132,6 +132,86 @@ Attacking preferences change choices rather than finishing/passing skill.
 Direct passing can skip a zone, with additional forward-distance completion risk.
 Live changes emit `tactics_changed` events.
 
+## Live formations, duties and coordinated movement
+
+Original squad `Player.position` values remain natural positions. `formation(team_id)`
+returns a detached snapshot of current active assignments; `set_formation` requires
+exactly those active players and preserves the current goalkeeper designation.
+Reduced teams use reduced assignments. Formation changes move targets gradually,
+preserve ball/restart state, and emit `formation_changed` events.
+
+```python
+from fm95.positions import Position
+from fm95.roles import Duty
+
+assignments = match.formation("home")
+assignments["home-6"] = Position.AM
+match.set_formation("home", assignments)
+match.set_player_duty("home", "home-9", Duty.ATTACK)
+```
+
+Duties are `BALANCED`, `DEFEND`, `SUPPORT`, and `ATTACK`. They change intent and
+selected action preferences, not base abilities. Substitutes inherit the outgoing
+assignment and duty; keepers currently support balanced duty only. Duty changes
+emit `player_duty_changed` events.
+
+Attacking support offers up to two staggered outlets, prioritises support-duty
+players and advances attack-duty runners. Defend-duty players and balanced centre
+backs hold shape. Defending keeps one nearest presser, reserves a nearby covering
+player where possible, and leaves others marking distinct opponents or holding
+shape. Cover selection prioritises defend-duty players within its reach radius.
+
+`match.transition` exposes an immutable turnover snapshot while active. The
+provisional default window is 12 seconds, fading with match time: eligible
+attackers advance and non-pressing defenders recover toward formation targets.
+Another turnover reverses the response; same-team passes do not reset its timer.
+Loose balls preserve prior ownership context, while restarts and kickoffs reset it.
+All movement retains elapsed-time reach limits and fatigue costs.
+
+`AttackConfig`, `DefenseConfig` and `TransitionConfig` expose these provisional
+behaviors. Batch switches `--no-attacking-movement`, `--no-defensive-cover` and
+`--no-transitions` isolate them. `--no-defense` retains the earlier spatial-movement
+isolation convention, disabling this shared movement step as well.
+
+## Goal and restart foundations
+
+Represented blocks, parries, punches and clearances crossing the goal mouth now
+score instead of always producing boundary restarts. `resolve_deflection_exit`
+supports deterministic scenarios. Height and woodwork are not represented, and
+own-goal attribution currently uses last touch rather than a full attribution model.
+Resolved misses and failed open-play deliveries retain their abstract non-goal exits.
+
+`restart_context` remembers the restart kind and taker until another player touches
+the ball. An ordinary second touch awards an indirect free kick; receiving a dropped
+ball permits repeated touches, but direct scoring still requires a second distinct
+player. Direct throw-in/indirect-free-kick goals produce goal kicks; direct own-goal
+entries from the represented restarts produce corners. Allowed direct goals from
+kickoffs, corners, goal kicks and direct free kicks remain available to the resolver.
+`record_ball_touch` and `resolve_restart_exit` support deterministic rule scenarios.
+The development `set_possession` override clears restart-touch memory.
+
+Restart setup corrects kickoff halves, opponent clearance, and penalty-area
+exclusion for goal kicks/defensive free kicks. Other players stay 4 m from a dropped
+ball; opponents stay 2 m from throw-ins and 9.15 m from free kicks, with the goal-line
+exception represented. Since corner balls sit at the corner point, opponents are
+placed 10.15 m from that point to clear the 1 m corner arc.
+
+Penalty setup puts the keeper on the goal line and other players behind the mark,
+outside the area and at least 9.15 m from the mark. Direct free-kick walls of at least
+three defenders keep attackers at least 1 m away. The pending-penalty inspector and
+execution share the same setup calculation. These are administrative placements,
+adding no represented running distance or condition cost.
+
+`restart_position_violations()` lists active players needing correction before a
+pending restart/kickoff. Full retakes, encroachment sanctions, quick-restart
+exceptions, handball and accidental penalty double-touch procedures are unfinished.
+Rule references: [IFAB Law 8](https://www.theifab.com/laws/latest/the-start-and-restart-of-play/),
+[Law 13](https://www.theifab.com/laws/latest/free-kicks/),
+[Law 14](https://www.theifab.com/laws/latest/the-penalty-kick/), and
+[Law 15](https://www.theifab.com/laws/latest/the-throw-in/),
+[Law 16](https://www.theifab.com/laws/latest/the-goal-kick/) and
+[Law 17](https://www.theifab.com/laws/latest/the-corner-kick/).
+
 ## Substitutions and injuries
 
 `Team.bench` stores named substitutes; `Team.lineup` retains the original starting
@@ -186,7 +266,11 @@ Useful reconciliation checks include:
 - Failed pass attempts = opposition interceptions + misplaced passes + passes out
   + passes flagged offside. A later offside after a loose-ball recovery does not
   count the same pass twice.
-- Shots on target = goals + opposition saves, including parries.
+- Shots on target = goals - own goals received - other non-shot/deflection goals
+  + opposition saves, including parries. `own_goals` counts goals conceded through
+  the team's own last touch; `own_goals_received` counts the corresponding benefit.
+- Indirect free kicks awarded to the opposition = offsides + represented restart
+  second-touch offences. These causes have separate counters.
 - Model xG = the sum of recorded unconditional shot-scoring probabilities,
   including blocked/saved/missed attempts.
 
@@ -199,22 +283,22 @@ changing instructions or features can change all subsequent random draws.
 
 ## Remaining Milestone 1 work
 
-Next: **live formation changes and individual player roles/instructions**.
-Further completion and review work includes richer coordinated attacking/defending
-behavior, remaining goal/restart/rule edge cases, and end-to-end tactical validation.
+Next: **added-time and period-ending foundations**, followed by remaining goal,
+restart and rule edge cases, and end-to-end tactical validation. Coordinated
+movement and management are foundations, not a complete tactical decision system.
 
 Known simplifications still include:
 
 - A point ball and discrete/abstract endpoints, with no continuous ball flight,
   height, spin, or full player collision model.
-- No woodwork/own-goal pipeline or complete direct-restart scoring rules.
+- No woodwork or ball-height model; deflection/own-goal attribution is provisional.
 - Offside covers represented involvement, not off-ball screening/interference.
-- Set-piece positioning is provisional; encroachment, retakes, countdowns, and
-  complete restart legality are unfinished.
+- Administrative restart/penalty/wall setup is represented, but encroachment,
+  retakes, countdowns, handball and complete restart legality remain unfinished.
 - No general added-time model, temporary injury treatment/return, or longer-term
   injury recovery system.
-- Formation changes, individual roles and a full tactical decision system remain
-  unfinished. There is no home-advantage model or demonstrated football realism.
+- No complete tactical decision system, home-advantage model, or demonstrated
+  aggregate football realism.
 
 **Calibration is deliberately reserved for the end of Milestone 1**, after the
 intended features are in place. That includes probability constants, tactical and

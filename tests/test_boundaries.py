@@ -1,5 +1,6 @@
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
 
 from fm95.actions import ActionConfig
 from fm95.crossing import CrossConfig
@@ -97,7 +98,9 @@ class BoundaryTests(unittest.TestCase):
         match.start()
         match.set_possession("a", "a-3", location=Location(.8, .5))
         match.set_possession("h", "h-9", location=Location(.7, .5))
-        match.step()
+        # Force a non-goal exit; goal-mouth deflections have separate tests.
+        with patch("fm95.match.rebound_endpoint", return_value=(1.1, .9)):
+            match.step()
         out = next(e for e in match.events if e.kind == "ball_out")
         self.assertEqual((out.team_id, out.player_id), ("a", "a-3"))
         self.assertEqual(match.statistics("a").blocks, 1)
@@ -123,7 +126,9 @@ class BoundaryTests(unittest.TestCase):
         match.shot_config = ShotConfig(block_probability=0, parry_probability=1, rebound_distance=1000)
         match.start()
         match.set_possession("h", "h-9", location=Location(.8, .5))
-        match.step()
+        # Force a non-goal exit; goal-mouth deflections have separate tests.
+        with patch("fm95.match.rebound_endpoint", return_value=(1.1, .9)):
+            match.step()
         out = next(e for e in match.events if e.kind == "ball_out")
         self.assertEqual((out.team_id, out.player_id), ("a", "a-1"))
         self.assertIsNotNone(match.pending_restart)

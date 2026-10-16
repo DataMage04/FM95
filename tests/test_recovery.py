@@ -55,7 +55,9 @@ class RecoveryTests(unittest.TestCase):
     def test_only_nearby_active_players_can_recover(self):
         match = self.make_match(recovery=RecoveryConfig(movement_speed=0, control_radius=.1))
         match.start()
-        point = match.player_locations("h")["h-11"]
+        # Give the intended recoverer a unique point, independent of kickoff setup.
+        point = Location(.4, .9)
+        match.set_possession("h", "h-11", location=point)
         match.set_loose_ball(point)
         match.step()
         self.assertEqual(match.possession.player_id, "h-11")

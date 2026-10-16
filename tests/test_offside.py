@@ -42,8 +42,10 @@ class OffsideTests(unittest.TestCase):
         return match._offside_snapshot(match.possession, match._active_team("h"), match._active_team("a"))
 
     def play_pass(self, match, completed=True):
+        team = match.pending_restart.team_id if match.pending_restart else match.possession.team_id
+        other = "a" if team == "h" else "h"
         with patch("fm95.match.resolve_pass", return_value=PassResult(
-                "h-9", Zone(2, 1), completed, None if completed else "a-3", 1 if completed else 0)):
+                f"{team}-9", Zone(2, 1), completed, None if completed else f"{other}-3", 1 if completed else 0)):
             match.step()
 
     def test_halfway_ball_and_second_last_opponent_ties_are_onside(self):
@@ -213,7 +215,7 @@ class OffsideTests(unittest.TestCase):
         match = run_match(Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95))
         for own, other in ((match.statistics("h"), match.statistics("a")),
                            (match.statistics("a"), match.statistics("h"))):
-            self.assertEqual(own.offsides, other.indirect_free_kicks_awarded)
+            self.assertEqual(own.offsides+own.restart_second_touches, other.indirect_free_kicks_awarded)
             self.assertGreaterEqual(own.offsides, own.passes_offside)
             self.assertLessEqual(own.indirect_free_kicks_taken, own.indirect_free_kicks_awarded)
         summary = run_batch(1, offside_config=OffsideConfig(enabled=False))

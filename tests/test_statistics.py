@@ -38,7 +38,7 @@ class StatisticsTests(unittest.TestCase):
         for own, other in ((home, away), (away, home)):
             self.assertEqual(own.passes_attempted - own.passes_completed,
                              other.interceptions + own.misplaced_passes + own.passes_out + own.passes_offside)
-            self.assertEqual(own.shots_on_target, own.goals + other.saves)
+            self.assertEqual(own.shots_on_target, own.goals-own.own_goals_received-own.deflection_goals + other.saves)
             self.assertLessEqual(own.shots_on_target, own.shots)
 
     def test_half_time_does_not_accrue_possession(self):

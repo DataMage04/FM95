@@ -93,7 +93,7 @@ class AttributeTests(unittest.TestCase):
         self.assertEqual(matches[0].events, matches[1].events)
         for team_id in ("h", "a"):
             stats = matches[0].statistics(team_id)
-            self.assertEqual(stats.goals, sum(e.kind == "goal" and e.team_id == team_id
+            self.assertEqual(stats.goals, sum(e.kind in ("goal", "own_goal", "deflection_goal") and e.team_id == team_id
                                              for e in matches[0].events))
             self.assertAlmostEqual(stats.expected_goals,
                 sum(e.goal_probability for e in matches[0].events

@@ -8,6 +8,9 @@ from dataclasses import dataclass
 class TeamStats:
     team_id: str
     goals: int
+    own_goals: int
+    own_goals_received: int
+    deflection_goals: int
     passes_attempted: int
     passes_completed: int
     shots: int
@@ -58,6 +61,7 @@ class TeamStats:
     passes_offside: int
     indirect_free_kicks_awarded: int
     indirect_free_kicks_taken: int
+    restart_second_touches: int
     penalties_awarded: int
     penalties_taken: int
     penalties_scored: int
@@ -92,7 +96,9 @@ def team_statistics(team_id, opponent_id, events, possession_seconds, *, conditi
     total = sum(possession_seconds.values())
     held = possession_seconds[team_id]
     return TeamStats(
-        team_id=team_id, goals=own["goal"],
+        team_id=team_id, goals=own["goal"]+own["own_goal"]+own["deflection_goal"],
+        own_goals=opponent["own_goal"], own_goals_received=own["own_goal"],
+        deflection_goals=own["deflection_goal"],
         passes_attempted=own["pass_completed"] + own["pass_intercepted"] + own["pass_loose"] + own["pass_out"] + own["pass_offside"],
         passes_completed=own["pass_completed"],
         shots=own["goal"] + own["shot_saved"] + own["shot_missed"] + own["shot_blocked"] + own["shot_parried"],
@@ -135,6 +141,7 @@ def team_statistics(team_id, opponent_id, events, possession_seconds, *, conditi
         offsides=own["offside"], passes_offside=own["pass_offside"],
         indirect_free_kicks_awarded=own["indirect_free_kick_awarded"],
         indirect_free_kicks_taken=own["indirect_free_kick_taken"],
+        restart_second_touches=own["restart_second_touch"],
         penalties_awarded=own["penalty_awarded"], penalties_taken=own["penalty_taken"],
         penalties_scored=sum(e.team_id == team_id and e.shot_type == "penalty" and e.kind == "goal" for e in events),
         penalties_saved=sum(e.team_id == opponent_id and e.shot_type == "penalty"

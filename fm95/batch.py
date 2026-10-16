@@ -6,6 +6,8 @@ from dataclasses import asdict
 import json
 from typing import Callable
 
+from fm95.transitions import TransitionConfig
+from fm95.attacking import AttackConfig
 from fm95.actions import ActionConfig
 from fm95.defending import DefenseConfig
 from fm95.recovery import RecoveryConfig
@@ -51,12 +53,16 @@ def run_batch(matches: int = 200, seed: int = 95,
               fatigue_config: FatigueConfig | None = None,
               auto_substitution_config: AutoSubstitutionConfig | None = None,
               injury_config: InjuryConfig | None = None,
-              home_tactics: TeamTactics | None = None, away_tactics: TeamTactics | None = None) -> dict:
+              home_tactics: TeamTactics | None = None, away_tactics: TeamTactics | None = None,
+              attack_config: AttackConfig | None = None,
+              transition_config: TransitionConfig | None = None) -> dict:
     """Match i uses seed+i; retain aggregates only, not every match's event log."""
     if type(matches) is not int or matches < 1:
         raise ValueError("Match count must be a positive integer.")
     if type(seed) is not int:
         raise ValueError("Base seed must be an integer.")
+    transition_config = transition_config if transition_config is not None else TransitionConfig()
+    attack_config = attack_config if attack_config is not None else AttackConfig()
     config = config if config is not None else ActionConfig()
     defense_config = defense_config if defense_config is not None else DefenseConfig()
     recovery_config = recovery_config if recovery_config is not None else RecoveryConfig()
@@ -90,7 +96,8 @@ def run_batch(matches: int = 200, seed: int = 95,
                                 offside_config=offside_config, set_piece_config=set_piece_config,
                                 substitution_config=substitution_config, fatigue_config=fatigue_config,
                                 auto_substitution_config=auto_substitution_config, injury_config=injury_config,
-                                home_tactics=home_tactics, away_tactics=away_tactics))
+                                home_tactics=home_tactics, away_tactics=away_tactics, attack_config=attack_config,
+                                transition_config=transition_config))
         if match.phase == Phase.ABANDONED:
             outcomes["abandoned"] += 1
             continue
@@ -116,6 +123,8 @@ def run_batch(matches: int = 200, seed: int = 95,
     return {
         "matches": matches, "completed_matches": completed,
         "base_seed": seed, "configuration": asdict(config),
+        "transition_configuration": asdict(transition_config),
+        "attacking_configuration": asdict(attack_config),
         "defense_configuration": asdict(defense_config),
         "recovery_configuration": asdict(recovery_config),
         "shot_configuration": asdict(shot_config),
@@ -145,6 +154,9 @@ def main():
     parser.add_argument("--context-strength", type=float, default=1.0,
                         help="Situational effects from 0 (neutral) to 1 (default)")
     parser.add_argument("--json", action="store_true", help="Print machine-readable summary")
+    parser.add_argument("--no-attacking-movement", action="store_true", help="Use static attacking shape targets")
+    parser.add_argument("--no-transitions", action="store_true", help="Disable turnover movement responses")
+    parser.add_argument("--no-defensive-cover", action="store_true", help="Disable coordinated cover behind the presser")
     parser.add_argument("--no-defense", action="store_true", help="Disable spatial defense for isolation")
     parser.add_argument("--no-loose-balls", action="store_true", help="Disable pass/tackle loose outcomes")
     parser.add_argument("--no-shot-interactions", action="store_true", help="Disable blocks and parries")
@@ -166,7 +178,7 @@ def main():
     if not 0 <= args.context_strength <= 1:
         parser.error("--context-strength must be between 0 and 1")
     summary = run_batch(args.matches, args.seed, ActionConfig(context_strength=args.context_strength),
-                        DefenseConfig(enabled=not args.no_defense),
+                        DefenseConfig(enabled=not args.no_defense, cover_enabled=not args.no_defensive_cover),
                         RecoveryConfig(enabled=not args.no_loose_balls),
                         ShotConfig(enabled=not args.no_shot_interactions),
                         OutOfPlayConfig(enabled=not args.no_out_of_play),
@@ -178,7 +190,9 @@ def main():
                         fatigue_config=FatigueConfig(enabled=not args.no_fatigue),
                         auto_substitution_config=AutoSubstitutionConfig(enabled=args.auto_substitutions),
                         injury_config=InjuryConfig(enabled=args.injuries),
-                        home_tactics=preset(args.home_style), away_tactics=preset(args.away_style))
+                        home_tactics=preset(args.home_style), away_tactics=preset(args.away_style),
+                        attack_config=AttackConfig(enabled=not args.no_attacking_movement),
+                        transition_config=TransitionConfig(enabled=not args.no_transitions))
     if args.json:
         print(json.dumps(summary, indent=2))
         return

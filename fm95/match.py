@@ -17,6 +17,13 @@ from fm95.boundaries import Boundary, BoundaryExit, OutOfPlayConfig, first_exit,
 from fm95.crossing import CrossConfig, can_cross, delivery_chance, aerial_chance
 from fm95.fatigue import (FatigueConfig, PlayerCondition, tick, movement,
                           movement_factor, effective_attributes)
+from fm95.set_piece_positions import penalty_positions, clear_attacking_wall
+from fm95.restart_positions import restart_positions, clear_distance
+from fm95.restart_rules import RestartContext, indirect_location
+from fm95.goals import crosses_goal_mouth
+from fm95.attacking import AttackConfig, attacking_targets
+from fm95.transitions import Transition, TransitionConfig, transition_targets
+from fm95.roles import Duty, instructions_for, duty_target
 from fm95.tactics import TeamTactics, preference, action_interval, action_preferences, shape_targets, workload
 from fm95.injuries import Injury, InjuryConfig, interval_chance, injury_chance
 from fm95.substitution_policy import (AutoSubstitutionConfig, SubstitutionRecommendation, recommend,
@@ -152,6 +159,9 @@ class MatchEvent:
     incoming_energy: float | None = None
     automatic: bool = False
     tactics: TeamTactics | None = None
+    formation: tuple[tuple[str, Position], ...] | None = None
+    duty: Duty | None = None
+    last_touch_team_id: str | None = None
 
 
 @dataclass(frozen=True, init=False)
@@ -218,7 +228,9 @@ class Match:
                  fatigue_config: FatigueConfig | None = None,
                  auto_substitution_config: AutoSubstitutionConfig | None = None,
                  injury_config: InjuryConfig | None = None,
-                 home_tactics: TeamTactics | None = None, away_tactics: TeamTactics | None = None):
+                 home_tactics: TeamTactics | None = None, away_tactics: TeamTactics | None = None,
+                 attack_config: AttackConfig | None = None,
+                 transition_config: TransitionConfig | None = None):
         if home.id == away.id:
             raise ValueError("A team cannot play itself.")
         if {p.id for p in home.squad} & {p.id for p in away.squad}:
@@ -227,6 +239,16 @@ class Match:
         away_tactics = away_tactics if away_tactics is not None else TeamTactics()
         if not isinstance(home_tactics, TeamTactics) or not isinstance(away_tactics, TeamTactics):
             raise ValueError("Team instructions must be TeamTactics instances.")
+        self.attack_config = attack_config if attack_config is not None else AttackConfig()
+        if not isinstance(self.attack_config, AttackConfig):
+            raise ValueError("Attacking movement requires an AttackConfig instance.")
+        self.transition_config = transition_config if transition_config is not None else TransitionConfig()
+        if not isinstance(self.transition_config, TransitionConfig):
+            raise ValueError("Transitions require a TransitionConfig instance.")
+        self._transition = None
+        self._transition_owner = None
+        self._restart_context = None
+        self._duties = {}
         self._tactics = {home.id: home_tactics, away.id: away_tactics}
         self.injury_config = injury_config if injury_config is not None else InjuryConfig()
         self._injuries: dict[str, Injury] = {}
@@ -286,6 +308,133 @@ class Match:
     def dead_ball_seconds(self) -> int:
         return self._dead_ball_seconds
 
+    def _restart_position_targets(self):
+        if self._pending_restart is not None:
+            restart = self._pending_restart
+            kind, team_id, taker_id, ball = restart.kind, restart.team_id, restart.taker_id, restart.location
+        elif self._kickoff_pending and self._possession is not None:
+            kind, team_id, taker_id, ball = "kickoff", self._possession.team_id, self._possession.player_id, self._possession.location
+        else:
+            raise RuntimeError("Restart placement requires a pending restart or kickoff.")
+        other = self.away.id if team_id == self.home.id else self.home.id
+        active = self.active_players(team_id)+self.active_players(other)
+        if kind == "penalty":
+            return penalty_positions(self.active_players(team_id), self.active_players(other),
+                {p.id:self._player_locations[p.id] for p in active}, taker_id, ball,
+                self.attacking_direction(team_id), self.pitch)
+        return restart_positions(kind, self.active_players(team_id), self.active_players(other),
+            {p.id:self._player_locations[p.id] for p in active}, taker_id, ball,
+            self.attacking_direction(team_id), self.pitch)
+
+    def restart_position_violations(self) -> tuple[str, ...]:
+        """Players needing correction under the represented setup rules."""
+        return tuple(pid for pid,point in self._restart_position_targets().items()
+                     if self.pitch.distance(self._player_locations[pid],point)>1e-8)
+
+    def _position_restart(self):
+        self._player_locations.update(self._restart_position_targets())
+        self._sync_carrier_location()
+
+    @property
+    def restart_context(self) -> RestartContext | None:
+        if (self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF)
+                or self._pending_restart is not None or self._kickoff_pending):
+            return None
+        return self._restart_context
+
+    def record_ball_touch(self, team_id: str, player_id: str, location: Location) -> bool:
+        """Record a represented touch; False means an ordinary second-touch offence.
+
+        A touch by another player releases direct-scoring restrictions. Mere
+        proximity, a missed challenge, or bouncing on the ground does not.
+        """
+        if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
+            raise RuntimeError("Touches require live play.")
+        if (not isinstance(location, Location)
+                or player_id not in {p.id for p in self.active_players(team_id)}):
+            raise ValueError("A touch requires an active player and valid location.")
+        context = self.restart_context
+        if context is None:
+            return True
+        if player_id != context.taker_id:
+            self._restart_context = None
+            return True
+        if context.kind == "dropped_ball":
+            return True
+        winner = self.away.id if team_id == self.home.id else self.home.id
+        point = indirect_location(location, self.attacking_direction(team_id), self.pitch)
+        taker = min(self.active_players(winner),
+                    key=lambda p: self.pitch.distance(self._player_locations[p.id], point))
+        self.events.append(MatchEvent(self.elapsed_seconds, "restart_second_touch", team_id,
+                                      player_id, location.zone, location=location, reason=context.kind))
+        self._possession = self._loose_ball = None
+        self._restart_context = None
+        self._stoppage_serial += 1
+        self._pending_restart = Restart("indirect_free_kick", winner, taker.id, point.zone, point)
+        self.events.append(MatchEvent(self.elapsed_seconds, "indirect_free_kick_awarded", winner,
+                                      taker.id, point.zone, location=point, reason="restart_second_touch"))
+        return False
+
+    def resolve_restart_exit(self, exit: BoundaryExit):
+        """Resolve an untouched restart delivery crossing a boundary."""
+        context = self.restart_context
+        if context is None:
+            raise RuntimeError("A direct restart exit requires an active restart context.")
+        if not isinstance(exit, BoundaryExit):
+            raise ValueError("A valid BoundaryExit is required.")
+        if not crosses_goal_mouth(exit, self.pitch):
+            self.award_out_of_play(exit, context.team_id, context.taker_id)
+            return
+        direction = Direction.RIGHT if exit.boundary == Boundary.RIGHT else Direction.LEFT
+        scoring_id = next(team.id for team in (self.home, self.away)
+                          if self.attacking_direction(team.id) == direction)
+        self._restart_context = None
+        if context.permits_direct_goal(scoring_id):
+            self.resolve_deflection_exit(exit, context.team_id, context.taker_id)
+        else:
+            self.events.append(MatchEvent(self.elapsed_seconds, "direct_restart_goal_disallowed",
+                context.team_id, context.taker_id, exit.location.zone,
+                location=exit.location, reason=context.kind))
+            self.award_out_of_play(exit, context.team_id, context.taker_id)
+
+    def _credit_goal(self, scoring_team_id: str, *, period_end=False):
+        if scoring_team_id == self.home.id:
+            self.home_goals += 1
+        else:
+            self.away_goals += 1
+        if not period_end:
+            self._kickoff(self.away if scoring_team_id == self.home.id else self.home)
+
+    def resolve_deflection_exit(self, exit: BoundaryExit, last_team_id: str, last_player_id: str):
+        """Resolve an already adjudicated legal deflection or clearance crossing.
+
+        This is not a direct-restart adjudicator. Normal resolved misses still
+        use award_out_of_play, because their synthetic endpoints are not shots
+        through the goal mouth. Own-goal attribution currently uses last touch.
+        """
+        if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
+            raise RuntimeError("An exit can be resolved only during play.")
+        if not isinstance(exit, BoundaryExit):
+            raise ValueError("A valid BoundaryExit is required.")
+        if last_player_id not in {p.id for p in self.active_players(last_team_id)}:
+            raise ValueError("Last touch requires an active player of the selected team.")
+        if not self.record_ball_touch(last_team_id, last_player_id, exit.location):
+            return
+        if self.restart_context is not None:
+            self.resolve_restart_exit(exit)
+            return
+        if not crosses_goal_mouth(exit, self.pitch):
+            self.award_out_of_play(exit, last_team_id, last_player_id)
+            return
+        direction = Direction.RIGHT if exit.boundary == Boundary.RIGHT else Direction.LEFT
+        scoring_id = next(team.id for team in (self.home, self.away)
+                          if self.attacking_direction(team.id) == direction)
+        kind = "deflection_goal" if scoring_id == last_team_id else "own_goal"
+        self.events.append(MatchEvent(self.elapsed_seconds, kind, scoring_id, last_player_id,
+            exit.location.zone, location=exit.location, exit_boundary=exit.boundary.value,
+            last_touch_team_id=last_team_id, reason="last_touch_attribution"))
+        self._credit_goal(scoring_id)
+
     def award_out_of_play(self, exit: BoundaryExit, last_team_id: str, last_player_id: str):
         """Apply a resolved non-goal exit, also usable for deterministic scenarios."""
         if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
@@ -318,6 +467,7 @@ class Match:
             exit.location.zone, location=exit.location, exit_boundary=exit.boundary.value))
         self._possession = None
         self._loose_ball = None
+        self._restart_context = None
         self._stoppage_serial += 1
         self._pending_restart = Restart(kind, winner, taker.id, point.zone, point)
         self.events.append(MatchEvent(self.elapsed_seconds, f"{kind}_awarded", winner, taker.id,
@@ -362,6 +512,7 @@ class Match:
             receiver_start_location=context.position(player_id), offside_line_x=context.defender_line_x))
         self._possession = None
         self._loose_ball = None
+        self._restart_context = None
         self._stoppage_serial += 1
         self._pending_restart = Restart("indirect_free_kick", defending_id, taker.id, location.zone, location)
         self.events.append(MatchEvent(self.elapsed_seconds, "indirect_free_kick_awarded", defending_id,
@@ -390,7 +541,10 @@ class Match:
             crosser_crossing=crosser.attributes.crossing, pressure=pressure.intensity,
             pressing_player_id=pressure.defender_id))
         if exit is not None:
-            self.award_out_of_play(exit, attacking.id, crosser.id)
+            if self.restart_context is not None:
+                self.resolve_restart_exit(exit)
+            else:
+                self.award_out_of_play(exit, attacking.id, crosser.id)
         else:
             self.set_loose_ball(point, reason="cross_delivery" if delivered else "poor_cross", aerial=delivered, offside=offside)
 
@@ -420,6 +574,7 @@ class Match:
             keeper_claim_probability=claim_chance))
         if not success:
             return False  # Outfield aerial duel still resolves in this action.
+        self.record_ball_touch(defending.id, keeper.id, ball.location)
         self._loose_ball = None
         self._possession = Possession(defending.id, keeper.id, location=ball.location)
         self._player_locations[keeper.id] = ball.location  # Abstract hand-contact endpoint.
@@ -428,7 +583,7 @@ class Match:
         x, y = punch_endpoint(ball.location, direction, self.pitch, self._rng, config.punch_distance)
         exit = first_exit(ball.location, x, y) if self.out_config.enabled else None
         if exit is not None:
-            self.award_out_of_play(exit, defending.id, keeper.id)
+            self.resolve_deflection_exit(exit, defending.id, keeper.id)
         else:
             point = Location(max(0, min(1, x)), max(0, min(1, y)))
             self.set_loose_ball(point, reason="goalkeeper_punch")
@@ -458,6 +613,8 @@ class Match:
         # Abstract contact points, consistent with existing pass endpoint relocation.
         self._player_locations[attacker.id] = ball.location
         self._player_locations[defender.id] = ball.location
+        if not self.record_ball_touch(team_id, winner.id, ball.location):
+            return
         self._loose_ball = None
         self._possession = Possession(team_id, winner.id, location=ball.location)
         self.events.append(MatchEvent(self.elapsed_seconds, "aerial_won", team_id, winner.id,
@@ -474,7 +631,7 @@ class Match:
         y = ball.location.y+(self._rng.random()-.5)*distance/self.pitch.width
         exit = first_exit(ball.location, x, y) if self.out_config.enabled else None
         if exit is not None:
-            self.award_out_of_play(exit, defending.id, defender.id)
+            self.resolve_deflection_exit(exit, defending.id, defender.id)
         else:
             point = Location(max(0, min(1, x)), max(0, min(1, y)))
             self.set_loose_ball(point, reason="headed_clearance")
@@ -505,6 +662,8 @@ class Match:
             / (1+before[player.id]) for _, player in eligible], k=1)[0]
         if (loose.offside is not None and winner_team == loose.offside.team_id
                 and self._check_offside(loose.offside, winner.id, loose.location)):
+            return
+        if not self.record_ball_touch(winner_team, winner.id, loose.location):
             return
         self._possession = Possession(winner_team, winner.id, location=loose.location)
         self._loose_ball = None
@@ -541,8 +700,18 @@ class Match:
         anchors = self.formation_reference_locations(defending.id)
         targets = defensive_targets(defending.lineup, attacking.lineup, self._player_locations,
             anchors, self._possession.player_id, ball, self.attacking_direction(defending.id),
-            self.pitch, config)
-        targets.update(self.formation_reference_locations(attacking.id))
+            self.pitch, config, self._duties)
+        targets.update(attacking_targets(attacking.lineup, self._player_locations,
+            self.formation_reference_locations(attacking.id), self._possession.player_id,
+            ball, self.attacking_direction(attacking.id), self.pitch, self._duties,
+            self.attack_config))
+        transition = self.transition
+        if transition is not None and transition.winning_team_id == attacking.id:
+            strength = 1-(self.elapsed_seconds-transition.started_at)/self.transition_config.duration_seconds
+            targets = transition_targets(attacking.lineup, defending.lineup, targets, anchors,
+                self._player_locations, self._possession.player_id, ball,
+                self.attacking_direction(attacking.id), self.pitch, self._duties,
+                strength, self.transition_config)
         for player in attacking.lineup + defending.lineup:
             if player.id != self._possession.player_id:
                 self._move_player(player, targets[player.id],
@@ -579,6 +748,7 @@ class Match:
                                key=lambda p: getattr(self._effective_player(p).attributes, attribute)).id
             self._possession = None
             self._loose_ball = None
+        self._restart_context = None
         self._stoppage_serial += 1
         self._pending_restart = Restart(kind, attacking.id, taker_id, point.zone, point)
         self.events.append(MatchEvent(self.elapsed_seconds, f"{kind}_awarded", attacking.id,
@@ -617,6 +787,7 @@ class Match:
             self._award_foul(possession, attacking, defending, defender.id, "press")
             return True, False
         if won:
+            self.record_ball_touch(defending.id, defender.id, possession.location)
             if knocked_loose:
                 self.set_loose_ball(possession.location, reason="press_dispossession")
                 return True, True
@@ -722,6 +893,8 @@ class Match:
             self.events.append(MatchEvent(self.elapsed_seconds, "substitution_window", team_id))
         for outgoing_id, incoming_id in changes:
             incoming = replacements[outgoing_id]
+            self._duties[incoming_id] = (Duty.BALANCED if incoming.is_goalkeeper else
+                                         self._duties.get(outgoing_id, Duty.BALANCED))
             point = keeper_point if incoming.is_goalkeeper and keeper_point is not None else points[outgoing_id]
             self._player_locations.pop(outgoing_id, None)
             self._player_locations[incoming_id] = point
@@ -812,6 +985,7 @@ class Match:
                      if self.pitch.in_penalty_area(ball, self.attacking_direction(winner)) else
                      min(eligible, key=lambda p: self.pitch.distance(self._player_locations[p.id], ball)))
             self._possession = self._loose_ball = None
+            self._restart_context = None
             self._stoppage_serial += 1
             self._pending_restart = Restart("dropped_ball", winner, taker.id, ball.zone, ball)
             self.events.append(MatchEvent(self.elapsed_seconds, "dropped_ball_awarded", winner, taker.id,
@@ -1030,6 +1204,53 @@ class Match:
             self._tactics[team_id] = instructions
             self.events.append(MatchEvent(self.elapsed_seconds, "tactics_changed", team_id, tactics=instructions))
 
+    def formation(self, team_id: str) -> dict[str, Position]:
+        """A detached snapshot of active assigned positions, not natural positions."""
+        return {p.id: p.position for p in self.active_players(team_id)}
+
+    def set_formation(self, team_id: str, assignments: dict[str, Position]):
+        """Reassign every active player atomically, without moving the ball or players.
+
+        Reduced teams use reduced assignments. The current keeper retains their
+        designation; goalkeeper replacement remains a substitution operation.
+        """
+        active = self.formation(team_id)
+        if self.phase in (Phase.FULL_TIME, Phase.ABANDONED):
+            raise RuntimeError("Formation cannot change after the match ends.")
+        if (not isinstance(assignments, dict) or assignments.keys() != active.keys()
+                or any(not isinstance(pos, Position) for pos in assignments.values())):
+            raise ValueError("Assign a Position to every active player exactly once.")
+        if any((pos == Position.GK) != (active[pid] == Position.GK)
+               for pid, pos in assignments.items()):
+            raise ValueError("The current goalkeeper must retain their designation.")
+        if assignments == active:
+            return
+        # Preserve the emergency keeper's underlying outfield slot for restoration.
+        emergency = self._emergency_keepers.get(team_id)
+        self._lineups[team_id] = tuple(
+            replace(p, position=assignments[p.id]) if p.id in assignments and p.id != emergency else p
+            for p in self._lineups[team_id])
+        self.events.append(MatchEvent(self.elapsed_seconds, "formation_changed", team_id,
+                                      formation=tuple(self.formation(team_id).items())))
+
+    def player_duty(self, team_id: str, player_id: str) -> Duty:
+        if player_id not in self.formation(team_id):
+            raise ValueError("Duty requires an active player on the selected team.")
+        return self._duties.get(player_id, Duty.BALANCED)
+
+    def set_player_duty(self, team_id: str, player_id: str, duty: Duty):
+        previous = self.player_duty(team_id, player_id)
+        if self.phase in (Phase.FULL_TIME, Phase.ABANDONED):
+            raise RuntimeError("Duties cannot change after the match ends.")
+        if not isinstance(duty, Duty):
+            raise ValueError("Duty must be a Duty enum value.")
+        if self.formation(team_id)[player_id] == Position.GK and duty != Duty.BALANCED:
+            raise ValueError("Goalkeepers currently support only balanced duty.")
+        if duty != previous:
+            self._duties[player_id] = duty
+            self.events.append(MatchEvent(self.elapsed_seconds, "player_duty_changed", team_id,
+                                          player_id, duty=duty))
+
     def current_action_interval(self) -> int:
         if self._possession is None or self._pending_restart is not None or self._kickoff_pending:
             return self.action_config.interval_seconds
@@ -1040,7 +1261,10 @@ class Match:
         players = self.active_players(team_id)
         direction = self.attacking_direction(team_id)
         references = formation_reference_locations(players, direction)
-        return shape_targets(players, references, direction, self.tactics(team_id))
+        targets = shape_targets(players, references, direction, self.tactics(team_id))
+        return {p.id: duty_target(targets[p.id], direction,
+                                 Duty.BALANCED if p.is_goalkeeper else self.player_duty(team_id, p.id))
+                for p in players}
 
     @property
     def ball_location(self) -> Location | None:
@@ -1058,8 +1282,8 @@ class Match:
                        *, location: Location | None = None):
         """Apply an action's resolved ownership/location; does not decide its success.
 
-        Passing and tackling will call this after resolving their outcomes.
-        Validation happens before mutation, so rejected changes leave state intact.
+        This development override clears restart-touch memory. Engine actions
+        record touches separately. Validation precedes all state changes.
         """
         if self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
             raise RuntimeError("Possession can change only during play.")
@@ -1067,15 +1291,22 @@ class Match:
         if player_id not in {player.id for player in self.active_players(team.id)}:
             raise ValueError("The ball carrier must be in the possessing team's lineup.")
         possession = Possession(team_id, player_id, zone, location=location)
+        if self._pending_restart is not None or self._kickoff_pending:
+            self._transition = self._transition_owner = None
+        self._restart_context = None
         self._kickoff_pending = False
         self._possession = possession
         self._loose_ball = None
         self._sync_carrier_location()
         self._pending_restart = None
+        self._observe_transition()
         self.events.append(MatchEvent(self.elapsed_seconds, "possession", team_id,
                                       player_id, possession.zone, location=possession.location))
 
     def _kickoff(self, team: Team):
+        self._transition = None
+        self._transition_owner = team.id
+        self._restart_context = None
         self._stoppage_serial += 1
         self._kickoff_pending = True
         team = self._active_team(team.id)
@@ -1086,7 +1317,7 @@ class Match:
         self._pending_restart = None
         self._seconds_since_action = 0
         self._reset_player_locations()
-        self._sync_carrier_location()
+        self._position_restart()
         self.events.append(MatchEvent(self.elapsed_seconds, "kickoff", team.id,
                                       taker.id, CENTRE, location=self._possession.location))
 
@@ -1153,7 +1384,47 @@ class Match:
                 self._sync_carrier_location()
                 self._seconds_since_action = 0
 
+    @property
+    def transition(self) -> Transition | None:
+        """Current turnover snapshot; time passes even while the ball is loose."""
+        if (not self.transition_config.enabled or self._transition is None
+                or self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF)
+                or self._pending_restart is not None or self._kickoff_pending
+                or self._possession is None
+                or self.elapsed_seconds-self._transition.started_at >= self.transition_config.duration_seconds):
+            return None
+        return self._transition
+
+    def _observe_transition(self):
+        if (not self.transition_config.enabled or self._pending_restart is not None
+                or self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF)):
+            self._transition = self._transition_owner = None
+            return
+        if self._kickoff_pending:
+            self._transition = None
+            self._transition_owner = self._possession.team_id if self._possession else None
+            return
+        if self._possession is None:
+            return  # Keep the last controlling team through a contested loose ball.
+        owner = self._possession.team_id
+        if self._transition_owner is not None and owner != self._transition_owner:
+            self._transition = Transition(owner, self._transition_owner,
+                                          self.elapsed_seconds, self._possession.location)
+        self._transition_owner = owner
+
     def _play_action(self, *, period_end=False):
+        if self._pending_restart is not None:
+            self._transition = self._transition_owner = None
+        self._resolve_action(period_end=period_end)
+        if self.events and self.events[-1].kind == "goal_kick":
+            self._transition = self._transition_owner = None
+        if self._pending_restart is not None or self.phase not in (Phase.FIRST_HALF, Phase.SECOND_HALF):
+            self._restart_context = None
+        self._observe_transition()
+
+    def _resolve_action(self, *, period_end=False):
+        if self._pending_restart is not None or self._kickoff_pending:
+            self._position_restart()
         was_kickoff = self._kickoff_pending
         self._kickoff_pending = False
         if (not was_kickoff and self._pending_restart is None and self._possession is not None
@@ -1173,19 +1444,27 @@ class Match:
             self._sync_carrier_location()
         if possession is None:
             raise RuntimeError("An action requires active possession.")
+        if was_kickoff:
+            self._restart_context = RestartContext("kickoff", possession.team_id, possession.player_id)
+        elif self._pending_restart is None and not self.record_ball_touch(
+                possession.team_id, possession.player_id, possession.location):
+            return
         attacking = self._active_team(possession.team_id)
         defending = self._active_team(self.away.id if attacking.id == self.home.id else self.home.id)
         carrier = next(p for p in attacking.lineup if p.id == possession.player_id)
         pressure = Pressure(None, None, 0)
         restart_kind = self._pending_restart.kind if self._pending_restart else None
         open_play = self._pending_restart is None
-        instructions = self.tactics(attacking.id)
+        instructions = instructions_for(self.tactics(attacking.id),
+                                        Duty.BALANCED if carrier.is_goalkeeper else
+                                        self.player_duty(attacking.id, carrier.id))
         choices = action_preferences(self.action_config, instructions)
         cross_choice = preference(self.cross_config.choice_probability, instructions.crossing)
         through_choice = preference(self.through_ball_config.choice_probability, instructions.through_balls)
         if self._pending_restart is not None:
             restart = self._pending_restart
             self._pending_restart = None
+            self._restart_context = RestartContext(restart.kind, restart.team_id, restart.taker_id)
             self.events.append(MatchEvent(self.elapsed_seconds, f"{restart.kind}_taken",
                                           restart.team_id, restart.taker_id, restart.zone,
                                           location=restart.location))
@@ -1239,6 +1518,7 @@ class Match:
                 self._award_foul(possession, attacking, defending, result.defender_id, "take_on")
                 return
             if not result.completed and self._tackle_knocks_loose():
+                self.record_ball_touch(defending.id, result.defender_id, possession.location)
                 self.events.append(MatchEvent(self.elapsed_seconds, "dribble_dispossessed", attacking.id,
                     possession.player_id, possession.zone, origin=possession.zone,
                     defender_id=result.defender_id, dribble_success_probability=result.success_probability,
@@ -1253,6 +1533,8 @@ class Match:
                 *self._action_elapsed_seconds/self.action_config.interval_seconds, self.pitch)
             zone = location.zone
             self._record_run(carrier, possession.location, location)
+            if not result.completed:
+                self.record_ball_touch(defending.id, result.defender_id, location)
             self._possession = (Possession(attacking.id, possession.player_id, location=location)
                                 if result.completed else Possession(defending.id, result.defender_id,
                                                                     location=location))
@@ -1325,14 +1607,19 @@ class Match:
                 intended_zone=result.zone, pass_type=pass_type,
                 receiver_start_location=receiver_start, intended_location=intended_location,
                 pressure=pressure.intensity, pressing_player_id=pressure.defender_id))
-            self.award_out_of_play(exit, attacking.id, possession.player_id)
+            if self.restart_context is not None:
+                self.resolve_restart_exit(exit)
+            else:
+                self.award_out_of_play(exit, attacking.id, possession.player_id)
             return
         misplaced = (not result.completed and self.recovery_config.enabled
             and self.recovery_config.misplaced_pass_probability > 0
             and self._rng.random() < self.recovery_config.misplaced_pass_probability)
         if result.completed:
+            self.record_ball_touch(attacking.id, result.receiver_id, location)
             self._possession = Possession(attacking.id, result.receiver_id, location=location)
         elif not misplaced:
+            self.record_ball_touch(defending.id, result.interceptor_id, location)
             self._possession = Possession(defending.id, result.interceptor_id, location=location)
         # One action event records the passer, intended receiver, destination and outcome.
         self.events.append(MatchEvent(
@@ -1356,14 +1643,8 @@ class Match:
         keeper = next(p for p in defending.lineup if p.is_goalkeeper)
         self._player_locations[keeper.id] = goal
         if penalty:
-            # Other players start outside the area and behind the mark, >=9.15 m away.
-            distance = max(self.pitch.penalty_depth+.1, self.pitch.penalty_depth*2/3+9.15)
-            x = max(0, min(1, goal.x-int(direction)*distance/self.pitch.length))
-            for player in attacking.lineup + defending.lineup:
-                if player.id not in (possession.player_id, keeper.id):
-                    current = self._player_locations[player.id]
-                    behind_x = min(current.x, x) if direction == Direction.RIGHT else max(current.x, x)
-                    self._player_locations[player.id] = Location(behind_x, current.y)
+            self._player_locations.update(penalty_positions(attacking.lineup, defending.lineup,
+                self._player_locations, possession.player_id, possession.location, direction, self.pitch))
         else:
             # A small provisional wall feeds the existing spatial blocking model.
             ox, oy = self.pitch.metres(possession.location)
@@ -1384,6 +1665,15 @@ class Match:
                 self._player_locations[player.id] = self.pitch.from_metres(
                     max(0, min(self.pitch.length, ox+dx*wall_distance-dy*offset)),
                     max(0, min(self.pitch.width, oy+dy*wall_distance+dx*offset)))
+            # Clamping near the goal line/touchline must not create an illegal wall.
+            for player in wall:
+                point = self._player_locations[player.id]
+                own_end = 1 if int(direction)==1 else 0
+                goal_line = abs(point.x-own_end)<1e-12 and abs(point.y-.5)*self.pitch.width <= self.pitch.goal_width/2
+                if not goal_line or self.pitch.distance(point,possession.location)<1:
+                    self._player_locations[player.id] = clear_distance(point,possession.location,9.15,self.pitch,-int(direction))
+            self._player_locations.update(clear_attacking_wall(attacking.lineup, wall,
+                self._player_locations, possession.location, direction, self.pitch))
         self._sync_carrier_location()
 
     def _play_shot(self, possession: Possession, attacking: TeamInPlay, defending: TeamInPlay,
@@ -1416,6 +1706,8 @@ class Match:
                                   block_probability=block_chance,
                                   parry_probability=parry_chance,
                                   heading=shooter.attributes.heading if header else None)
+        if self.restart_context is not None and not self.restart_context.permits_direct_goal(attacking.id):
+            result = replace(result, goal_probability=0)
         outcome = result.outcome
         self.events.append(MatchEvent(
             self.elapsed_seconds, outcome, attacking.id, possession.player_id,
@@ -1436,6 +1728,7 @@ class Match:
         if period_end and outcome != "goal":
             return  # No follow-up kick is permitted after this period-ending penalty.
         if outcome in ("shot_blocked", "shot_parried"):
+            self.record_ball_touch(defending.id, blocker_id if outcome == "shot_blocked" else goalkeeper.id, possession.location)
             if outcome == "shot_blocked":
                 origin = self._player_locations[blocker_id]
             else:
@@ -1444,7 +1737,7 @@ class Match:
                 x, y = rebound_endpoint(origin, self.pitch, self._rng, self.shot_config.rebound_distance)
                 exit = first_exit(origin, x, y)
                 if exit is not None:
-                    self.award_out_of_play(exit, defending.id,
+                    self.resolve_deflection_exit(exit, defending.id,
                                            blocker_id if outcome == "shot_blocked" else goalkeeper.id)
                     return
                 location = Location(x, y)
@@ -1453,13 +1746,15 @@ class Match:
             self.set_loose_ball(location, reason="blocked_shot" if outcome == "shot_blocked" else "goalkeeper_parry",
                                 offside=offside)
             return
+        if outcome == "goal" and self.restart_context is not None and not self.restart_context.permits_direct_goal(attacking.id):
+            # The shot event has not scored: replace its result without adding xG.
+            self.events[-1] = replace(self.events[-1], kind="shot_missed",
+                on_target_probability=0, goal_probability=0, reason="direct_restart_goal_disallowed")
+            end_x = 1 if self.attacking_direction(attacking.id) == Direction.RIGHT else 0
+            self.resolve_restart_exit(BoundaryExit(Boundary.RIGHT if end_x else Boundary.LEFT, Location(end_x,.5)))
+            return
         if outcome == "goal":
-            if attacking.id == self.home.id:
-                self.home_goals += 1
-            else:
-                self.away_goals += 1
-            if not period_end:
-                self._kickoff(defending)
+            self._credit_goal(attacking.id, period_end=period_end)
         else:
             if outcome == "shot_missed" and self.out_config.enabled:
                 end_x = 1 if self.attacking_direction(attacking.id) == Direction.RIGHT else 0
@@ -1470,6 +1765,7 @@ class Match:
             column = 0 if self.attacking_direction(defending.id) == Direction.RIGHT else 2
             zone = Zone(column, 1)
             location = Location(.05 if column == 0 else .95, .5)
+            self.record_ball_touch(defending.id, goalkeeper.id, location)
             self._possession = Possession(defending.id, goalkeeper.id, location=location)
             if outcome == "shot_missed":
                 self.events.append(MatchEvent(self.elapsed_seconds, "goal_kick",
