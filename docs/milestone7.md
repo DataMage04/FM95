@@ -22,15 +22,14 @@ must retain a goalkeeper and 10 outfield players so it can field a legal XI.
 - The transfer window is open before the first matchday and at the halfway
   point of the fixture schedule. Transfer actions are only available between
   matchdays.
-- Each club starts with a one-time transfer allowance of 2,000,000 game units.
-  The manager enters the agreed fee; the move is rejected if the allowance is
-  too small.
+- Each club starts with a 2,000,000 game-unit transfer allowance. The manager
+  enters the agreed fee; the move is rejected if the allowance or cash balance
+  is too small.
 - Existing players receive a basic three-season contract. New and renewed
-  contracts can run for one to five seasons.
-- Saves use format version 3. Earlier version 1 and version 2 saves are loaded
-  with initial contracts and transfer allowances.
-- This milestone does not simulate wages or recurring revenue and costs; those
-  belong to Milestone 8.
+  contracts can run for one to five seasons and include a weekly wage.
+- Save format version 4 also stores Milestone 8 finances. Earlier save versions
+  migrate with initial financial accounts; Milestone 7 transfer history is
+  applied to the new cash balances.
 
 Run the complete test suite with:
 

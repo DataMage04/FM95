@@ -109,7 +109,9 @@ class ManagerCLI:
             self.output("7. Transfer market")
             self.output("8. View contracts / renew a contract")
             self.output("9. Transfer history")
-            choice = self._ask_choice("Choose: ", {"1", "2", "3", "4", "5", "6", "7", "8", "9"})
+            self.output("10. Club finances")
+            self.output("11. Finance history")
+            choice = self._ask_choice("Choose: ", {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"})
             if choice == "1":
                 self._play_next_matchday()
             elif choice == "2":
@@ -126,6 +128,10 @@ class ManagerCLI:
                 self._show_contracts()
             elif choice == "9":
                 self._show_transfer_history()
+            elif choice == "10":
+                self._show_finances()
+            elif choice == "11":
+                self._show_finance_history()
             else:
                 return
 
@@ -148,6 +154,12 @@ class ManagerCLI:
             return
         for result in results:
             self._show_match_result(result)
+        club_id = self.session.manager_team_id
+        club_entries = [entry for entry in self.session.finances.transactions
+                        if entry.matchday == matchday and entry.club_id == club_id]
+        net = sum(entry.amount for entry in club_entries)
+        balance = self.session.finances.accounts[club_id].cash_balance
+        self.output(f"Finances: matchday net {net:+,}; cash balance {balance:,}.")
         if self.session.save_path is not None:
             self.session.save()
             self.output(f"Autosaved: {self.session.save_path}")
@@ -228,9 +240,13 @@ class ManagerCLI:
             fee = self._ask_integer("Transfer fee [0]: ", default=0, minimum=0)
             duration = self._ask_integer("Contract length in seasons [3]: ", default=3,
                                          minimum=1, maximum=5)
-            record = self.session.make_transfer(player.id, fee=fee, contract_seasons=duration)
+            current_wage = operations.contracts[player.id].weekly_wage
+            wage = self._ask_integer(f"Weekly wage [{current_wage:,}]: ", default=current_wage,
+                                     minimum=0)
+            record = self.session.make_transfer(player.id, fee=fee, contract_seasons=duration,
+                                                weekly_wage=wage)
             self.output(f"Signed {record.player_name} from {targets[index - 1][0].name} "
-                        f"for {record.fee:,}; contract through season {duration}.")
+                        f"for {record.fee:,}; contract through season {duration} at {wage:,}/week.")
             self._autosave_squad_change()
         except (TypeError, ValueError) as exc:
             self.output(f"Transfer not completed: {exc}")
@@ -242,7 +258,8 @@ class ManagerCLI:
         self.output(f"\nContracts — {club.name}")
         for index, player in enumerate(club.players, 1):
             contract = operations.contracts[player.id]
-            self.output(f"{index:2}. {player.name:<25} through season {contract.end_season}")
+            self.output(f"{index:2}. {player.name:<25} through season {contract.end_season}; "
+                        f"wage {contract.weekly_wage:,}/week")
         raw = self.input("Player number to renew, or Enter to return: ").strip()
         if not raw:
             return
@@ -251,10 +268,14 @@ class ManagerCLI:
             if not 1 <= index <= len(club.players):
                 raise ValueError(f"Choose a number from 1 to {len(club.players)}.")
             player = club.players[index - 1]
+            current_wage = operations.contracts[player.id].weekly_wage
             seasons = self._ask_integer("New contract length in seasons [3]: ", default=3,
                                         minimum=1, maximum=5)
-            contract = self.session.renew_contract(player.id, seasons=seasons)
-            self.output(f"{player.name} is contracted through season {contract.end_season}.")
+            wage = self._ask_integer(f"Weekly wage [{current_wage:,}]: ", default=current_wage,
+                                     minimum=0)
+            contract = self.session.renew_contract(player.id, seasons=seasons, weekly_wage=wage)
+            self.output(f"{player.name} is contracted through season {contract.end_season} "
+                        f"at {contract.weekly_wage:,}/week.")
             self._autosave_squad_change()
         except (TypeError, ValueError) as exc:
             self.output(f"Contract not updated: {exc}")
@@ -271,6 +292,33 @@ class ManagerCLI:
             self.output(f"Season {record.season}, {record.window}: {record.player_name} — "
                         f"{clubs[record.from_club_id]} → {clubs[record.to_club_id]} "
                         f"({record.fee:,})")
+
+    def _show_finances(self) -> None:
+        assert self.session is not None
+        club_id = self.session.manager_team_id
+        summary = self.session.finances.account_summary(club_id, self.session.squad_operations)
+        account = summary["account"]
+        self.output(f"\nClub finances — {self.session.manager_club.name}")
+        self.output(f"Cash balance: {account.cash_balance:,} (starting {account.starting_balance:,})")
+        self.output(f"Transfer allowance: {summary['transfer_budget']:,}")
+        self.output(f"Registered squad wages: {summary['weekly_wages']:,} per matchday")
+        self.output(f"Sponsorship: {account.sponsorship_per_matchday:,} per matchday")
+        self.output(f"Stadium: {account.stadium_capacity:,} capacity; tickets {account.ticket_price:,}; "
+                    f"operations {account.stadium_cost_per_home_match:,} per home match")
+        self.output(f"Income to date: {summary['income_to_date']:,}; "
+                    f"expenses to date: {summary['expenses_to_date']:,}")
+
+    def _show_finance_history(self) -> None:
+        assert self.session is not None
+        entries = [item for item in self.session.finances.transactions
+                   if item.club_id == self.session.manager_team_id]
+        self.output("\nFinance history")
+        if not entries:
+            self.output("No financial transactions have been posted.")
+            return
+        for entry in entries[-30:]:
+            self.output(f"MD {entry.matchday:>2}  {entry.category:<14} "
+                        f"{entry.amount:>10,}  {entry.description}")
 
     def _autosave_squad_change(self) -> None:
         assert self.session is not None

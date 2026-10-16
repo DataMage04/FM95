@@ -72,7 +72,7 @@ class SquadOperationsTests(unittest.TestCase):
                          (None, 0))
 
     def test_cli_can_complete_a_market_transfer(self):
-        replies = iter(["1", "25000", "2"])
+        replies = iter(["1", "25000", "2", "30000"])
         output = []
         cli = ManagerCLI(input_fn=lambda _prompt: next(replies), output_fn=output.append)
         cli.session = self.session
@@ -118,7 +118,7 @@ class SquadOperationsTests(unittest.TestCase):
             saved = json.loads(path.read_text(encoding="utf-8"))
             resumed = ManagerSession.load(path)
 
-        self.assertEqual(saved["version"], 3)
+        self.assertEqual(saved["version"], 4)
         self.assertEqual(resumed.squad_operations.history, self.session.squad_operations.history)
         self.assertEqual(resumed.squad_operations.budgets, self.session.squad_operations.budgets)
         self.assertEqual(resumed.squad_operations.contracts, self.session.squad_operations.contracts)
@@ -130,6 +130,7 @@ class SquadOperationsTests(unittest.TestCase):
             saved = json.loads(path.read_text(encoding="utf-8"))
             saved["version"] = 2
             saved.pop("squad")
+            saved.pop("finances")
             path.write_text(json.dumps(saved), encoding="utf-8")
             resumed = ManagerSession.load(path)
 
@@ -137,6 +138,27 @@ class SquadOperationsTests(unittest.TestCase):
         self.assertTrue(all(contract.end_season == 3
                             for contract in resumed.squad_operations.contracts.values()))
         self.assertTrue(all(amount > 0 for amount in resumed.squad_operations.budgets.values()))
+
+    def test_v3_transfer_history_debits_the_migrated_cash_account(self):
+        _seller, player = self.target_field_player()
+        self.session.make_transfer(player.id, fee=120_000)
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.session.save(Path(folder) / "v3.json")
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            saved["version"] = 3
+            saved.pop("finances")
+            for contract in saved["squad"]["contracts"]:
+                contract.pop("weekly_wage", None)
+            path.write_text(json.dumps(saved), encoding="utf-8")
+            resumed = ManagerSession.load(path)
+
+        account = resumed.finances.accounts[resumed.manager_team_id]
+        self.assertEqual(account.cash_balance, account.starting_balance - 120_000)
+        self.assertEqual(resumed.finances.transactions[0].category, "transfer_fee")
+        self.assertEqual(resumed.squad_operations.history[0].fee, 120_000)
+        seller_id = resumed.squad_operations.history[0].from_club_id
+        seller_account = resumed.finances.accounts[seller_id]
+        self.assertEqual(seller_account.cash_balance, seller_account.starting_balance + 120_000)
 
     def test_contract_renewal_keeps_registration_owner(self):
         player = self.session.manager_club.players[0]

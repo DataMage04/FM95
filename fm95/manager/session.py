@@ -100,19 +100,27 @@ class ManagerSession:
     def squad_operations(self):
         return self.season.squad_operations
 
+    @property
+    def finances(self):
+        return self.season.club_finances
+
     def transfer_targets(self):
         """Return registered players at other clubs, in stable display order."""
         return tuple((club, player) for club in self.season.teams
                      if club.id != self.manager_team_id
                      for player in club.players)
 
-    def make_transfer(self, player_id: str, *, fee: int, contract_seasons: int = 3):
+    def make_transfer(self, player_id: str, *, fee: int, contract_seasons: int = 3,
+                      weekly_wage: int | None = None):
         return self.squad_operations.complete_transfer(
-            self.season, player_id, fee=fee, contract_seasons=contract_seasons
+            self.season, player_id, fee=fee, contract_seasons=contract_seasons,
+            weekly_wage=weekly_wage
         )
 
-    def renew_contract(self, player_id: str, *, seasons: int):
-        return self.squad_operations.renew_contract(self.season, player_id, seasons=seasons)
+    def renew_contract(self, player_id: str, *, seasons: int, weekly_wage: int | None = None):
+        return self.squad_operations.renew_contract(
+            self.season, player_id, seasons=seasons, weekly_wage=weekly_wage
+        )
 
     def play_next_matchday(self, *, selection: SquadSelection | None = None,
                            tactics: TeamTactics | None = None) -> tuple[FixtureResult, ...]:
@@ -128,6 +136,9 @@ class ManagerSession:
         tactic_map = ({self.manager_team_id: tactics} if tactics is not None else None)
         results = self.season.play_matchday(matchday, manager_selection=selection,
                                             tactics=tactic_map)
+        if all(self.season.result_for(fixture.id) is not None
+               for fixture in self.season.fixtures_for_matchday(matchday)):
+            self.finances.process_matchday(self.season, self.squad_operations, matchday)
         return results
 
     def save(self, path: str | Path | None = None) -> Path:

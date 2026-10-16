@@ -95,7 +95,9 @@ class Season:
         self._run_settings: dict | None = None
         self.manager_assignment: ManagerAssignment | None = None
         from fm95.squad.operations import SquadOperations
+        from fm95.finances.model import ClubFinances
         self.squad_operations = SquadOperations(self.teams)
+        self.club_finances = ClubFinances(self.teams)
         self.validate()
 
     def assign_manager(self, manager: Manager, team_id: str, *,
@@ -375,13 +377,16 @@ class Season:
                         raise ValueError(f"Result for {fixture_id} has an invalid saved lineup.")
         if self.squad_operations is not None:
             self.squad_operations.validate(self.teams)
+        if self.club_finances is not None:
+            self.club_finances.validate(self.teams, fixtures=self.fixtures, results=self.results,
+                                        matchdays=self.matchdays)
 
     @classmethod
     def _restore(cls, *, name: str, teams: tuple[Team, ...], seed: int,
                  points_for_win: int, points_for_draw: int, points_for_loss: int,
                  fixtures: tuple[Fixture, ...], results: tuple[FixtureResult, ...],
                  run_settings: dict | None, manager_assignment: ManagerAssignment | None = None,
-                 squad_operations=None) -> "Season":
+                 squad_operations=None, club_finances=None) -> "Season":
         """Rebuild validated persisted state without regenerating or losing results."""
         season = cls(name, teams, seed=seed, points_for_win=points_for_win,
                      points_for_draw=points_for_draw, points_for_loss=points_for_loss)
@@ -394,6 +399,8 @@ class Season:
         season.manager_assignment = manager_assignment
         if squad_operations is not None:
             season.squad_operations = squad_operations
+        if club_finances is not None:
+            season.club_finances = club_finances
         season.validate()
         return season
 

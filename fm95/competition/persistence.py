@@ -36,12 +36,13 @@ from fm95.players.model import Player
 from fm95.teams.model import Team
 from fm95.teams.club import Club, SquadSelection
 from fm95.squad.operations import Contract, SquadOperations, TransferRecord
+from fm95.finances.model import ClubAccount, ClubFinances, FinanceTransaction
 from fm95.competition.season import Fixture, FixtureResult, Season
 from fm95.competition.manager import Manager, ManagerAssignment
 
 
 SAVE_FORMAT = "fm95-season"
-SAVE_VERSION = 3
+SAVE_VERSION = 4
 
 MATCH_OPTION_TYPES = {
     "action_config": ActionConfig,
@@ -108,13 +109,15 @@ def load_season(path: str | os.PathLike) -> Season:
         raise ValueError(f"Season save is not valid JSON: {exc}") from exc
     legacy_keys = {"format", "version", "season", "rules", "teams", "fixtures", "results", "settings"}
     version3_keys = legacy_keys | {"manager", "squad"}
-    if not isinstance(data, dict) or set(data) not in (legacy_keys, legacy_keys | {"manager"}, version3_keys):
+    version4_keys = version3_keys | {"finances"}
+    if not isinstance(data, dict) or set(data) not in (
+            legacy_keys, legacy_keys | {"manager"}, version3_keys, version4_keys):
         raise ValueError("Save keys are invalid.")
     if type(data.get("version")) is int and data["version"] >= 2 and "manager" not in data:
         raise ValueError("Version 2 season saves must contain a manager field.")
     if data["format"] != SAVE_FORMAT:
         raise ValueError("File is not an FM95 season save.")
-    if type(data["version"]) is not int or data["version"] not in (1, 2, SAVE_VERSION):
+    if type(data["version"]) is not int or data["version"] not in (1, 2, 3, SAVE_VERSION):
         raise ValueError(f"Unsupported season save version: {data['version']!r}.")
 
     season_data = _require_object(data["season"], {"name", "seed"}, "season")
@@ -129,6 +132,12 @@ def load_season(path: str | os.PathLike) -> Season:
     current_clubs = tuple(Club.from_team(team) if isinstance(team, Team) else team for team in teams)
     squad = (_squad_operations_from_data(data["squad"], current_clubs)
              if data["version"] >= 3 else SquadOperations(current_clubs))
+    if data["version"] >= 4:
+        finances = _club_finances_from_data(data["finances"], current_clubs)
+    else:
+        finances = ClubFinances(current_clubs)
+        if data["version"] == 3:
+            finances.migrate_legacy_transfers(squad.history)
     return Season._restore(
         name=season_data["name"], teams=teams, seed=season_data["seed"],
         points_for_win=rules["points_for_win"], points_for_draw=rules["points_for_draw"],
@@ -137,6 +146,7 @@ def load_season(path: str | os.PathLike) -> Season:
         manager_assignment=(_manager_from_data(data["manager"], {team.id: team for team in teams})
                             if data.get("manager") is not None else None),
         squad_operations=squad,
+        club_finances=finances,
     )
 
 
@@ -160,6 +170,7 @@ def _season_to_data(season: Season) -> dict[str, Any]:
         },
         "manager": _manager_to_data(season.manager_assignment),
         "squad": _squad_operations_to_data(season.squad_operations),
+        "finances": _club_finances_to_data(season.club_finances),
     }
 
 
@@ -176,8 +187,11 @@ def _squad_operations_from_data(data: Any, clubs: tuple[Club, ...]) -> SquadOper
     item = _require_object(data, {"contracts", "budgets", "history"}, "squad operations")
     contracts = {}
     for raw in _require_list(item["contracts"], "contracts"):
-        contract_data = _require_object(raw,
-            {"player_id", "club_id", "start_season", "end_season"}, "contract")
+        if not isinstance(raw, dict) or set(raw) not in (
+                {"player_id", "club_id", "start_season", "end_season"},
+                {"player_id", "club_id", "start_season", "end_season", "weekly_wage"}):
+            raise ValueError("Contract keys are invalid.")
+        contract_data = raw
         contract = Contract(**contract_data)
         if contract.player_id in contracts:
             raise ValueError("Save contains duplicate player contracts.")
@@ -190,6 +204,40 @@ def _squad_operations_from_data(data: Any, clubs: tuple[Club, ...]) -> SquadOper
              "from_club_id", "to_club_id", "fee"}, "transfer record")
         history.append(TransferRecord(**record_data))
     return SquadOperations(clubs, contracts=contracts, budgets=budgets, history=history)
+
+
+def _club_finances_to_data(finances: ClubFinances) -> dict[str, Any]:
+    return {
+        "accounts": [asdict(finances.accounts[club_id])
+                     for club_id in sorted(finances.accounts)],
+        "transactions": [asdict(entry) for entry in finances.transactions],
+        "processed_matchdays": sorted(finances.processed_matchdays),
+    }
+
+
+def _club_finances_from_data(data: Any, clubs: tuple[Club, ...]) -> ClubFinances:
+    item = _require_object(data, {"accounts", "transactions", "processed_matchdays"}, "club finances")
+    accounts = {}
+    for raw in _require_list(item["accounts"], "club accounts"):
+        account_data = _require_object(raw,
+            {"club_id", "starting_balance", "cash_balance", "sponsorship_per_matchday",
+             "stadium_capacity", "ticket_price", "stadium_cost_per_home_match"}, "club account")
+        account = ClubAccount(**account_data)
+        if account.club_id in accounts:
+            raise ValueError("Save contains duplicate club finance accounts.")
+        accounts[account.club_id] = account
+    transactions = []
+    for raw in _require_list(item["transactions"], "finance transactions"):
+        transaction_data = _require_object(raw,
+            {"matchday", "club_id", "category", "description", "amount"}, "finance transaction")
+        transactions.append(FinanceTransaction(**transaction_data))
+    processed = _require_list(item["processed_matchdays"], "processed finance matchdays")
+    if any(type(day) is not int or day < 1 for day in processed):
+        raise ValueError("Saved processed finance matchdays are invalid.")
+    if len(processed) != len(set(processed)):
+        raise ValueError("Save contains duplicate processed finance matchdays.")
+    return ClubFinances(clubs, accounts=accounts, transactions=transactions,
+                        processed_matchdays=processed)
 
 
 def _club_to_data(club: Club) -> dict[str, Any]:

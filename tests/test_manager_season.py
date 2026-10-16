@@ -76,6 +76,7 @@ class ManagerSeasonTests(unittest.TestCase):
             data["version"] = 1
             data.pop("manager")
             data.pop("squad")
+            data.pop("finances")
             for club in data["teams"]:
                 players = club.pop("players")
                 lineup_ids = set(club.pop("default_lineup_ids"))

@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 
 from fm95.competition.manager import cpu_selection
-from fm95.match.spatial.positions import Position
 from fm95.players.model import Player
 from fm95.teams.club import Club, SquadSelection
 
@@ -21,6 +20,7 @@ class Contract:
     club_id: str
     start_season: int
     end_season: int
+    weekly_wage: int = 25_000
 
     def __post_init__(self):
         if not isinstance(self.player_id, str) or not self.player_id.strip():
@@ -30,6 +30,8 @@ class Contract:
         if (type(self.start_season) is not int or type(self.end_season) is not int
                 or self.start_season < 1 or self.end_season < self.start_season):
             raise ValueError("Contract seasons are invalid.")
+        if type(self.weekly_wage) is not int or self.weekly_wage < 0:
+            raise ValueError("Weekly wage must be a non-negative whole number.")
 
 
 @dataclass(frozen=True)
@@ -62,17 +64,18 @@ class TransferRecord:
 class SquadOperations:
     """Mutable career data kept separately from match and finance systems.
 
-    Budgets are a one-time transfer allowance for this milestone. Wages, income,
-    and recurring budget changes belong to the club-finances milestone.
+    Transfer allowances remain separate from the cash accounts managed by the
+    finance subsystem. Contracts carry the weekly wages charged each matchday.
     """
 
     def __init__(self, clubs, *, contracts=None, budgets=None, history=()):
         clubs = tuple(clubs)
         club_ids = {club.id for club in clubs}
-        player_clubs = {player.id: club.id for club in clubs for player in club.players}
+        player_clubs = {player.id: (club.id, player) for club in clubs for player in club.players}
         self.contracts = dict({
-            player_id: Contract(player_id, club_id, 1, DEFAULT_CONTRACT_SEASONS)
-            for player_id, club_id in player_clubs.items()
+            player_id: Contract(player_id, club_id, 1, DEFAULT_CONTRACT_SEASONS,
+                                self._starting_wage(player))
+            for player_id, (club_id, player) in player_clubs.items()
         } if contracts is None else contracts)
         self.budgets = dict({club_id: STARTING_TRANSFER_BUDGET for club_id in club_ids}
                             if budgets is None else budgets)
@@ -176,7 +179,8 @@ class SquadOperations:
                     assignment.manager, assignment.team_id, selection, assignment.tactics
                 )
 
-    def complete_transfer(self, season, player_id, *, fee, contract_seasons=DEFAULT_CONTRACT_SEASONS):
+    def complete_transfer(self, season, player_id, *, fee,
+                          contract_seasons=DEFAULT_CONTRACT_SEASONS, weekly_wage=None):
         """Move a player between clubs after validating window, roster, and budget."""
         window, completed = self.current_window(season)
         if window is None:
@@ -197,6 +201,11 @@ class SquadOperations:
             raise ValueError("That player is already registered at your club.")
         buyer = season._team_by_id[buyer_id]
         seller = season._team_by_id[seller_id]
+        previous_contract = self.contracts[player_id]
+        if weekly_wage is None:
+            weekly_wage = previous_contract.weekly_wage
+        if type(weekly_wage) is not int or weekly_wage < 0:
+            raise ValueError("Weekly wage must be a non-negative whole number.")
         if len(buyer.players) >= MAX_REGISTERED_PLAYERS:
             raise ValueError(f"{buyer.name} has reached the {MAX_REGISTERED_PLAYERS}-player registration limit.")
         if len(seller.players) <= MIN_REGISTERED_PLAYERS:
@@ -207,6 +216,9 @@ class SquadOperations:
             raise ValueError(f"{seller.name} must keep at least 10 outfield players for a legal XI.")
         if fee > self.budgets[buyer_id]:
             raise ValueError(f"Transfer budget is {self.budgets[buyer_id]:,}; fee is {fee:,}.")
+        if not season.club_finances.can_pay(buyer_id, fee):
+            balance = season.club_finances.accounts[buyer_id].cash_balance
+            raise ValueError(f"Club cash is {balance:,}; transfer fee is {fee:,}.")
 
         rosters = {
             seller_id: tuple(p for p in seller.players if p.id != player_id),
@@ -214,19 +226,31 @@ class SquadOperations:
         }
         self.replace_rosters(season, rosters)
         self.contracts.pop(player_id)
-        self.contracts[player_id] = Contract(player_id, buyer_id, 1, contract_seasons)
+        self.contracts[player_id] = Contract(player_id, buyer_id, 1, contract_seasons, weekly_wage)
         self.budgets[buyer_id] -= fee
         self.history.append(TransferRecord(1, completed, window, player.id, player.name,
                                            seller_id, buyer_id, fee))
+        season.club_finances.record_transfer_fee(buyer_id, fee, matchday=completed)
+        season.club_finances.receive_transfer_fee(seller_id, fee, matchday=completed)
         self.validate(season.teams)
         return self.history[-1]
 
-    def renew_contract(self, season, player_id, *, seasons):
+    def renew_contract(self, season, player_id, *, seasons, weekly_wage=None):
         if type(seasons) is not int or not 1 <= seasons <= MAX_CONTRACT_SEASONS:
             raise ValueError(f"A contract must be between 1 and {MAX_CONTRACT_SEASONS} seasons.")
         contract = self.contracts.get(player_id)
         if contract is None or contract.club_id not in {club.id for club in season.teams}:
             raise ValueError(f"Unknown registered player: {player_id}.")
-        self.contracts[player_id] = Contract(player_id, contract.club_id, 1, seasons)
+        if weekly_wage is None:
+            weekly_wage = contract.weekly_wage
+        if type(weekly_wage) is not int or weekly_wage < 0:
+            raise ValueError("Weekly wage must be a non-negative whole number.")
+        self.contracts[player_id] = Contract(player_id, contract.club_id, 1, seasons, weekly_wage)
         self.validate(season.teams)
         return self.contracts[player_id]
+
+    @staticmethod
+    def _starting_wage(player):
+        attributes = player.attributes
+        mean_ability = sum(getattr(attributes, name) for name in attributes.__dataclass_fields__) / len(attributes.__dataclass_fields__)
+        return int(round((10_000 + 25_000 * mean_ability) / 100) * 100)

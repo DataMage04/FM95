@@ -23,7 +23,9 @@ commas, or press Enter to keep the current lineup. Saves are local JSON files;
 choose **Save career** before exiting. Once saved, completed matchdays autosave.
 The load menu lists files under `saves/` and also accepts a file path. Squad
 operations include contracts and transfers during pre-season and the mid-season
-window; see the [Milestone 7 guide](docs/milestone7.md).
+window, with cash flow from wages, sponsorship, ticket sales, and stadium costs;
+see the [Milestone 7](docs/milestone7.md) and [Milestone 8](docs/milestone8.md)
+guides.
 
 See [the CLI guide](docs/milestone6.md) for the full prototype workflow.
 
@@ -39,6 +41,7 @@ python -m unittest discover -s tests -q     # full automated test suite
 
 - `fm95/match`: match engine, spatial model, mechanics, and systems
 - `fm95/players` and `fm95/teams`: player, club, and squad models
+- `fm95/squad` and `fm95/finances`: registration, contracts, transfers, and cash flow
 - `fm95/competition`: seasons, fixtures, standings, and save/resume
 - `fm95/manager`: reusable career actions and the terminal interface
 - `fm95/analysis`: calibration and integrated validation tools
