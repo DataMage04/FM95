@@ -78,15 +78,15 @@ class DeflectionGoalTests(unittest.TestCase):
         match.set_possession('h','h-9',location=Location(.8,.5))
         with patch('fm95.match.rebound_endpoint',return_value=(1.01,.5)):
             match._play_shot(match.possession,match._active_team('h'),match._active_team('a'),Pressure(None,None,0))
-        self.assertEqual([e.kind for e in match.events[-3:]],['shot_parried','own_goal','kickoff'])
+        self.assertEqual([e.kind for e in match.events[-3:]],['goal','goal_attribution','kickoff'])
         home,away = match.statistics('h'),match.statistics('a')
-        self.assertEqual((home.goals,home.shots,home.shots_on_target,away.saves,away.own_goals),(1,1,1,1,1))
+        self.assertEqual((home.goals,home.shots,home.shots_on_target,away.saves,away.own_goals),(1,1,1,0,0))
         self.assertEqual(home.expected_goals,0)
         self.assertEqual(match.home_goals,1)
 
     def test_blocked_shot_deflection_uses_blockers_last_touch(self):
         match = self.make_match(defense_config=DefenseConfig(enabled=False),
-            shot_config=ShotConfig(block_probability=1))
+            shot_config=ShotConfig(block_probability=1),action_config=ActionConfig(on_target_probability=0))
         match.set_possession('a','a-3',location=Location(.9,.5))
         match.set_possession('h','h-9',location=Location(.8,.5))
         with patch('fm95.match.rebound_endpoint',return_value=(1.01,.5)):
@@ -96,3 +96,15 @@ class DeflectionGoalTests(unittest.TestCase):
         self.assertEqual(match.statistics('a').blocks,1)
         self.assertEqual(match.statistics('h').shots_on_target,0)
         self.assertEqual(match.home_goals,1)
+
+    def test_on_target_block_continuation_is_credited_to_shooter_once(self):
+        match=self.make_match(defense_config=DefenseConfig(enabled=False),
+            action_config=ActionConfig(on_target_probability=1),shot_config=ShotConfig(block_probability=1))
+        match.set_possession('a','a-3',location=Location(.9,.5))
+        match.set_possession('h','h-9',location=Location(.8,.5))
+        with patch('fm95.match.rebound_endpoint',return_value=(1.01,.5)):
+            match._play_shot(match.possession,match._active_team('h'),match._active_team('a'),Pressure(None,None,0))
+        goal=next(e for e in match.events if e.kind=='goal')
+        self.assertEqual((goal.player_id,goal.deflector_id),('h-9','a-3'))
+        self.assertEqual((match.statistics('h').goals,match.statistics('h').shots),(1,1))
+        self.assertEqual(match.statistics('a').own_goals,0)

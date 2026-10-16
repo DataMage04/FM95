@@ -174,6 +174,7 @@ class ShotResult:
     on_target_probability: float
     goal_probability: float
     block_probability: float = 0
+    intended_on_target: bool | None = None
 
 
 def resolve_shot(zone: Zone, rng: Random, config: ActionConfig, *, finishing: float = 0.5,
@@ -187,7 +188,7 @@ def resolve_shot(zone: Zone, rng: Random, config: ActionConfig, *, finishing: fl
     goal_probability = (1-block_probability)*on_target*goal_given_target
     target_probability = (1-block_probability)*on_target
     if block_probability > 0 and rng.random() < block_probability:
-        return ShotResult("shot_blocked", target_probability, goal_probability, block_probability)
+        return ShotResult("shot_blocked", target_probability, goal_probability, block_probability, rng.random()<on_target)
     if rng.random() >= on_target:
         outcome = "shot_missed"
     elif rng.random() < goal_given_target:
@@ -195,7 +196,7 @@ def resolve_shot(zone: Zone, rng: Random, config: ActionConfig, *, finishing: fl
     else:
         outcome = ("shot_parried" if parry_probability > 0 and rng.random() < parry_probability
                    else "shot_saved")
-    return ShotResult(outcome, target_probability, goal_probability, block_probability)
+    return ShotResult(outcome, target_probability, goal_probability, block_probability, outcome!="shot_missed")
 
 
 @dataclass(frozen=True)

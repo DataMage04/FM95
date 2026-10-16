@@ -7,6 +7,14 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class TeamStats:
     team_id: str
+    woodwork_contacts: int
+    penalty_retakes: int
+    penalties_voided: int
+    indirect_rule_offences: int
+    keeper_time_violations: int
+    temporary_treatments: int
+    treatment_returns: int
+    off_ball_offsides: int
     goals: int
     own_goals: int
     own_goals_received: int
@@ -96,17 +104,22 @@ def team_statistics(team_id, opponent_id, events, possession_seconds, *, conditi
     total = sum(possession_seconds.values())
     held = possession_seconds[team_id]
     return TeamStats(
+        temporary_treatments=own["temporary_treatment"],treatment_returns=own["treatment_return"],
+        off_ball_offsides=sum(e.team_id==team_id and e.kind=="offside" and e.reason is not None and e.reason.startswith("off_ball_") for e in events),
+        penalty_retakes=own["penalty_retake"],penalties_voided=own["penalty_voided"],
+        indirect_rule_offences=own["indirect_rule_offence"],keeper_time_violations=own["goalkeeper_time_violation"],
+        woodwork_contacts=own["woodwork_contact"],
         team_id=team_id, goals=own["goal"]+own["own_goal"]+own["deflection_goal"],
         own_goals=opponent["own_goal"], own_goals_received=own["own_goal"],
         deflection_goals=own["deflection_goal"],
         passes_attempted=own["pass_completed"] + own["pass_intercepted"] + own["pass_loose"] + own["pass_out"] + own["pass_offside"],
         passes_completed=own["pass_completed"],
-        shots=own["goal"] + own["shot_saved"] + own["shot_missed"] + own["shot_blocked"] + own["shot_parried"],
+        shots=own["goal"] + own["shot_saved"] + own["shot_missed"] + own["shot_blocked"] + own["shot_parried"] + own["shot_woodwork"],
         shots_on_target=own["goal"] + own["shot_saved"] + own["shot_parried"],
         saves=opponent["shot_saved"] + opponent["shot_parried"], interceptions=opponent["pass_intercepted"],
         possession_seconds=held, possession_percentage=100 * held / total if total else 0.0,
         expected_goals=sum(e.goal_probability for e in events
-                           if e.team_id == team_id and e.kind in ("goal", "shot_saved", "shot_missed", "shot_blocked", "shot_parried")
+                           if e.team_id == team_id and e.kind in ("goal", "shot_saved", "shot_missed", "shot_blocked", "shot_parried", "shot_woodwork")
                            and e.goal_probability is not None),
         dribbles_attempted=own["dribble_completed"] + own["dribble_tackled"] + own["dribble_dispossessed"],
         dribbles_completed=own["dribble_completed"],
@@ -130,7 +143,7 @@ def team_statistics(team_id, opponent_id, events, possession_seconds, *, conditi
         crosses_delivered=own["cross_delivered"],
         aerials_attempted=own["aerial_won"] + opponent["aerial_won"], aerials_won=own["aerial_won"],
         headed_shots=sum(e.team_id == team_id and e.shot_type == "header"
-                         and e.kind in ("goal", "shot_saved", "shot_missed", "shot_blocked", "shot_parried") for e in events),
+                         and e.kind in ("goal", "shot_saved", "shot_missed", "shot_blocked", "shot_parried", "shot_woodwork") for e in events),
         headed_goals=sum(e.team_id == team_id and e.shot_type == "header" and e.kind == "goal" for e in events),
         headed_clearances=own["headed_clearance"],
         keeper_cross_attempts=own["keeper_cross_claimed"]+own["keeper_cross_punched"]+own["keeper_cross_missed"],

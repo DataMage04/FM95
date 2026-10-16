@@ -6,6 +6,8 @@ from dataclasses import asdict
 import json
 from typing import Callable
 
+from fm95.woodwork import WoodworkConfig
+from fm95.timekeeping import AddedTimeConfig
 from fm95.transitions import TransitionConfig
 from fm95.attacking import AttackConfig
 from fm95.actions import ActionConfig
@@ -55,12 +57,16 @@ def run_batch(matches: int = 200, seed: int = 95,
               injury_config: InjuryConfig | None = None,
               home_tactics: TeamTactics | None = None, away_tactics: TeamTactics | None = None,
               attack_config: AttackConfig | None = None,
-              transition_config: TransitionConfig | None = None) -> dict:
+              transition_config: TransitionConfig | None = None,
+              added_time_config: AddedTimeConfig | None = None,
+              woodwork_config: WoodworkConfig | None = None) -> dict:
     """Match i uses seed+i; retain aggregates only, not every match's event log."""
     if type(matches) is not int or matches < 1:
         raise ValueError("Match count must be a positive integer.")
     if type(seed) is not int:
         raise ValueError("Base seed must be an integer.")
+    woodwork_config = woodwork_config if woodwork_config is not None else WoodworkConfig()
+    added_time_config = added_time_config if added_time_config is not None else AddedTimeConfig()
     transition_config = transition_config if transition_config is not None else TransitionConfig()
     attack_config = attack_config if attack_config is not None else AttackConfig()
     config = config if config is not None else ActionConfig()
@@ -88,6 +94,7 @@ def run_batch(matches: int = 200, seed: int = 95,
     completed = 0
     loose_seconds = 0
     dead_seconds = 0
+    elapsed_seconds = 0
     for index in range(matches):
         match = run_match(Match(*teams, seed=seed + index, action_config=config,
                                 defense_config=defense_config, recovery_config=recovery_config,
@@ -97,11 +104,12 @@ def run_batch(matches: int = 200, seed: int = 95,
                                 substitution_config=substitution_config, fatigue_config=fatigue_config,
                                 auto_substitution_config=auto_substitution_config, injury_config=injury_config,
                                 home_tactics=home_tactics, away_tactics=away_tactics, attack_config=attack_config,
-                                transition_config=transition_config))
+                                transition_config=transition_config, added_time_config=added_time_config,woodwork_config=woodwork_config))
         if match.phase == Phase.ABANDONED:
             outcomes["abandoned"] += 1
             continue
         completed += 1
+        elapsed_seconds += match.elapsed_seconds
         loose_seconds += match.loose_ball_seconds
         dead_seconds += match.dead_ball_seconds
         for team in teams:
@@ -123,6 +131,10 @@ def run_batch(matches: int = 200, seed: int = 95,
     return {
         "matches": matches, "completed_matches": completed,
         "base_seed": seed, "configuration": asdict(config),
+        "woodwork_configuration": asdict(woodwork_config),
+        "added_time_configuration": asdict(added_time_config),
+        "average_elapsed_seconds": elapsed_seconds/completed if completed else 0.0,
+        "average_added_time_seconds": elapsed_seconds/completed-5400 if completed else 0.0,
         "transition_configuration": asdict(transition_config),
         "attacking_configuration": asdict(attack_config),
         "defense_configuration": asdict(defense_config),
@@ -155,6 +167,10 @@ def main():
                         help="Situational effects from 0 (neutral) to 1 (default)")
     parser.add_argument("--json", action="store_true", help="Print machine-readable summary")
     parser.add_argument("--no-attacking-movement", action="store_true", help="Use static attacking shape targets")
+    parser.add_argument("--temporary-injuries", action="store_true", help="Mix temporary treatment into generated injuries (provisional 50 percent)")
+    parser.add_argument("--off-ball-offside", action="store_true", help="Enable geometric keeper-screening checks")
+    parser.add_argument("--woodwork", action="store_true", help="Enable abstract post/crossbar contacts")
+    parser.add_argument("--added-time", action="store_true", help="Represent stoppage delays and per-half added time")
     parser.add_argument("--no-transitions", action="store_true", help="Disable turnover movement responses")
     parser.add_argument("--no-defensive-cover", action="store_true", help="Disable coordinated cover behind the presser")
     parser.add_argument("--no-defense", action="store_true", help="Disable spatial defense for isolation")
@@ -185,14 +201,15 @@ def main():
                         CrossConfig(enabled=not args.no_crossing),
                         KeeperCrossConfig(enabled=not args.no_keeper_crosses),
                         ThroughBallConfig(enabled=not args.no_through_balls),
-                        OffsideConfig(enabled=not args.no_offside),
+                        OffsideConfig(enabled=not args.no_offside,screening_enabled=args.off_ball_offside),
                         SetPieceConfig(enabled=not args.no_set_pieces),
                         fatigue_config=FatigueConfig(enabled=not args.no_fatigue),
                         auto_substitution_config=AutoSubstitutionConfig(enabled=args.auto_substitutions),
-                        injury_config=InjuryConfig(enabled=args.injuries),
+                        injury_config=InjuryConfig(enabled=args.injuries or args.temporary_injuries,temporary_probability=.5 if args.temporary_injuries else 0),
                         home_tactics=preset(args.home_style), away_tactics=preset(args.away_style),
                         attack_config=AttackConfig(enabled=not args.no_attacking_movement),
-                        transition_config=TransitionConfig(enabled=not args.no_transitions))
+                        transition_config=TransitionConfig(enabled=not args.no_transitions),
+                        added_time_config=AddedTimeConfig(enabled=args.added_time),woodwork_config=WoodworkConfig(enabled=args.woodwork))
     if args.json:
         print(json.dumps(summary, indent=2))
         return
@@ -201,6 +218,7 @@ def main():
     print(f"Outcomes: {summary['outcomes']}")
     print(f"Mean total goals: {summary['average_total_goals']:.2f}")
     print(f"Mean uncontrolled time: {summary['average_loose_ball_seconds']:.1f} s")
+    print(f"Mean elapsed match time: {summary['average_elapsed_seconds']:.1f} s")
     print(f"Mean dead-ball restart time: {summary['average_dead_ball_seconds']:.1f} s")
     for side, stats in summary["team_averages"].items():
         print(f"{side}: goals={stats['goals']:.2f}, model xG={stats['expected_goals']:.2f}, "

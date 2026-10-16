@@ -12,12 +12,13 @@ Python 3.10 or newer; no external runtime dependencies.
 python main.py
 python -m unittest discover -s tests -v
 python -m fm95.batch --matches 2 --seed 95 --json
+python -m fm95.validation --matches 8 --seed 95 --json
 ```
 
 The demo uses synthetic equal-ability teams, different tactical instructions,
 automatic substitutions, and opt-in injury generation. It prints sample actions,
 shots, restarts, substitutions, and statistics. The current regression suite has
-**286 tests**.
+**314 tests**.
 
 A batch defaults to balanced tactics with automatic management and random injuries
 disabled. Enable those features explicitly:
@@ -29,7 +30,12 @@ python -m fm95.batch --matches 2 --home-style pressing --away-style direct --jso
 
 The example styles are `balanced`, `pressing`, `possession`, and `direct`. They are
 provisional configurations for exploring behavior, not validated tactical advice.
-Use `python -m fm95.batch --help` for isolation switches.
+Use `python -m fm95.batch --help` for isolation switches. Optional cumulative
+features can be exercised together:
+
+```sh
+python -m fm95.batch --matches 2 --seed 95 --added-time --woodwork --temporary-injuries --off-ball-offside --auto-substitutions --json
+```
 
 ## Implemented foundations
 
@@ -41,15 +47,15 @@ Use `python -m fm95.batch --help` for isolation switches.
 | Possession | Controlled, loose/aerial, and pending-restart states; recovery contests and possession accounting |
 | Passing | Completed, intercepted, loose, out-of-play, and offside deliveries; forward runs, through balls, and tactical long passes |
 | Defending | Closing down, distinct marking, coordinated cover behind the press, pressure, tackles, fouls, and shot blocks |
-| Shooting | Shot goals, deflection/own goals, held saves, misses, parries, rebounds and headers; scoring probabilities and model xG |
+| Shooting | Shot goals, deflection/own goals, held saves, misses, parries, optional woodwork, rebounds and headers; scoring probabilities and model xG |
 | Crossing | Open-play/corner deliveries, aerial contests, headers, headed clearances, keeper claims and punches |
 | Restarts | Boundary/foul/injury restarts; direct-scoring and ordinary second-touch restrictions; clearance, penalty and wall setup |
-| Offside | Position snapshots at the teammate's touch, checked at represented receptions, recoveries, and aerial challenges |
+| Offside | Position snapshots at the teammate's touch, checked at receptions, recoveries, aerial challenges and represented off-ball interference |
 | Discipline | Yellow cards, second yellows, straight reds, active-player exclusion, emergency keepers, minimum-player handling |
 | Substitutions | Single/grouped changes at stoppages and halftime, configurable limits/opportunities, no return substitutions |
 | Condition | Stamina-dependent depletion, represented movement costs, stoppage/halftime recovery, effective abilities and movement limits |
 | Management | Read-only fatigue recommendations and optional automatic fatigue/injury replacements |
-| Injuries | Optional open-play/foul incidents, match-ending withdrawals, replacement recommendations, short-handed play |
+| Injuries | Optional open-play/foul incidents, withdrawals, temporary treatment/return, replacement recommendations, short-handed play |
 | Team tactics | Independent instructions, live formations and individual duties; attacking support, defensive cover and timed turnover responses |
 | Diagnostics | Timestamped events, immutable statistics/condition snapshots, seeded batches, JSON configuration and result summaries |
 
@@ -73,11 +79,18 @@ Changing instructions moves targets, not existing players instantaneously.
 The default action interval is six seconds. Tempo changes the possessing team's
 open-play interval. Loose balls, kickoffs and pending restarts retain the base
 interval; movement reach and injury exposure use actual elapsed action time.
-Whistles end periods at 2700 and 5400 seconds. A pending penalty resolves before
-the whistle at that timestamp; general added time is not implemented.
+The default regulation baseline is 5400 seconds. A pending penalty, including a
+required retake, resolves before the period ends; the second half retains its full
+2700 seconds after any first-half extension.
+
+`AddedTimeConfig(enabled=True)` (batch `--added-time`) compensates actual consumed
+stoppage delays per half. `delay_play` supports explicit delays and `period_timing`
+returns an immutable timing snapshot. The announced minimum can increase for
+further lost time; overlapping delays are not double-counted. Halftime management
+is excluded. Delay constants and rounding remain provisional.
 
 For completed matches, controlled seconds + loose-ball seconds + dead-ball
-seconds equal 5400. Possession percentages use controlled time only. Legacy
+seconds equal actual elapsed match time, including extensions. Possession percentages use controlled time only. Legacy
 isolation modes can retain earlier instant/held restart conventions.
 
 ## Attributes, condition and actions
@@ -177,8 +190,15 @@ isolation convention, disabling this shared movement step as well.
 
 Represented blocks, parries, punches and clearances crossing the goal mouth now
 score instead of always producing boundary restarts. `resolve_deflection_exit`
-supports deterministic scenarios. Height and woodwork are not represented, and
-own-goal attribution currently uses last touch rather than a full attribution model.
+supports deterministic scenarios. Optional `WoodworkConfig(enabled=True)` represents near/far-post and crossbar
+contacts, followed by a goal or rebound. These are discrete contact outcomes;
+continuous height and flight remain abstract.
+
+Shot events retain intended aim. An immediately represented on-target shot
+deflected into goal is credited to its shooter by replacing the original shot
+outcome; an off-target shot deflected into the defender's goal remains an own goal.
+`goal_attribution` records the deflector without adding a second shot or extra xG.
+Independent clearance/punch goals retain their separate attribution path.
 Resolved misses and failed open-play deliveries retain their abstract non-goal exits.
 
 `restart_context` remembers the restart kind and taker until another player touches
@@ -203,8 +223,19 @@ execution share the same setup calculation. These are administrative placements,
 adding no represented running distance or condition cost.
 
 `restart_position_violations()` lists active players needing correction before a
-pending restart/kickoff. Full retakes, encroachment sanctions, quick-restart
-exceptions, handball and accidental penalty double-touch procedures are unfinished.
+pending restart/kickoff. Explicit `PenaltyIncident` inputs adjudicate accidental
+double touches, relevant encroachment, keeper-line offences, backwards kicks,
+illegal feints and wrong kickers. Voided attempts do not count as shots or xG;
+retakes, indirect free kicks and represented warnings/cards follow the decision.
+
+`handle_ball` accepts an adjudicated handling incident. Keeper handling tracks
+intended teammate backpasses, direct teammate throws and rehandling after release.
+An attempted release kick has its own exception. Actual hand control is separate
+from foot possession: a countdown precedes the eight-second violation, which
+awards a corner, with repeat sanctions. `restart_offence` handles represented
+wall-distance, deliberate blocking, foul throws, delay and moving-ball incidents;
+a quick interception is permitted. These observer APIs do not infer body/arm
+legality or invent random offence frequencies.
 Rule references: [IFAB Law 8](https://www.theifab.com/laws/latest/the-start-and-restart-of-play/),
 [Law 13](https://www.theifab.com/laws/latest/free-kicks/),
 [Law 14](https://www.theifab.com/laws/latest/the-penalty-kick/), and
@@ -238,11 +269,20 @@ role-specific effective abilities, and remaining limits. It protects the current
 restart taker and avoids replacing recent substitutes solely for fatigue.
 
 `InjuryConfig(enabled=True)` enables provisional random open-play and foul injuries.
-All represented injuries force withdrawal for the remainder of this match.
+The default injury remains a withdrawal for the remainder of the match.
 `injure_player(team_id, player_id)` also supports deterministic scenarios even when
-random generation is disabled. `injury(team_id, player_id)` retains incident history.
+random generation is disabled. `injury(team_id, player_id)` exposes current withdrawal state; `injury_history`
+preserves incidents after recovery.
 Existing foul/boundary restarts take precedence; other injury stoppages award a
 short dropped-ball restart, with the defending keeper receiving drops in their area.
+
+Temporary treatment is optional: use `treat_player` or configure
+`InjuryConfig.temporary_probability` (batch `--temporary-injuries` uses a provisional
+.5 mixture). The default treatment wait is 60 running-clock seconds after restart.
+Eligible returns represent referee permission and enter from the touchline;
+halftime, keeper and represented quick-treatment exceptions are supported.
+Off-field players recover without playing-time credit. Substitution cancels return,
+and dismissed players cannot return.
 
 Automatic managers prioritise injury replacements over fatigue changes, without
 waiting for fatigue thresholds or minimum playing time. Manual managers can replace
@@ -250,6 +290,13 @@ withdrawn players at the stoppage. If limits/bench options prevent a change, tea
 can continue short-handed with an emergency keeper if needed. Fewer than seven
 available players prevents continued play; a manager may restore seven through a
 legal injury replacement before the next step.
+
+Off-ball offside involvement can be supplied with `report_offside_involvement`
+for screening, challenges, attempts or obstruction with an explicit impact flag.
+Optional `OffsideConfig.screening_enabled` (batch `--off-ball-offside`) adds a narrow
+point-player vision-corridor proxy near the keeper before a shot. Mere offside
+position is not penalized; saved/woodwork rebounds retain the original snapshot.
+This is not a continuous body or vision model.
 
 ## Events, statistics and batch output
 
@@ -270,9 +317,10 @@ Useful reconciliation checks include:
   + opposition saves, including parries. `own_goals` counts goals conceded through
   the team's own last touch; `own_goals_received` counts the corresponding benefit.
 - Indirect free kicks awarded to the opposition = offsides + represented restart
-  second-touch offences. These causes have separate counters.
+  second-touch offences + other represented indirect rule offences. These causes
+  have separate counters.
 - Model xG = the sum of recorded unconditional shot-scoring probabilities,
-  including blocked/saved/missed attempts.
+  including blocked/saved/missed/woodwork attempts.
 
 Model xG describes this engine's assumptions; it is not an empirical expected-goals
 model. Batch match i uses seed + i, retains aggregates rather than full event logs,
@@ -283,20 +331,26 @@ changing instructions or features can change all subsequent random draws.
 
 ## Remaining Milestone 1 work
 
-Next: **added-time and period-ending foundations**, followed by remaining goal,
-restart and rule edge cases, and end-to-end tactical validation. Coordinated
-movement and management are foundations, not a complete tactical decision system.
+The requested goal-handling, represented rules, treatment/off-ball interactions
+and integrated validation stages are implemented. The next stage is calibration
+preparation, followed by calibration and attribute-range refinement.
+
+The integrated runner checks state invariants each tick, statistical reconciliation,
+immutable squad data and exact seeded replay. It combines tactical changes,
+substitutions, a dismissal, treatment/return, added time, woodwork and off-ball
+screening, including attribute-range stress cases. The committed
+[validation report](docs/integrated-validation.json) records eight completed
+scenarios, 16 simulations and 91,234 state checks. This verifies consistency and
+determinism, not football realism or exhaustive feature combinations.
 
 Known simplifications still include:
 
 - A point ball and discrete/abstract endpoints, with no continuous ball flight,
   height, spin, or full player collision model.
-- No woodwork or ball-height model; deflection/own-goal attribution is provisional.
-- Offside covers represented involvement, not off-ball screening/interference.
-- Administrative restart/penalty/wall setup is represented, but encroachment,
-  retakes, countdowns, handball and complete restart legality remain unfinished.
-- No general added-time model, temporary injury treatment/return, or longer-term
-  injury recovery system.
+- Explicit observer inputs for several referee incidents, rather than automatic
+  physical detection of every offence; no claim of complete rule coverage.
+- A geometric screening proxy and immediate represented deflection attribution.
+- Temporary match treatment, without a longer-term injury recovery system.
 - No complete tactical decision system, home-advantage model, or demonstrated
   aggregate football realism.
 

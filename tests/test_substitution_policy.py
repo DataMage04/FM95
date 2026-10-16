@@ -22,6 +22,8 @@ class SubstitutionPolicyTests(unittest.TestCase):
                       auto_substitution_config=AutoSubstitutionConfig(**policy))
         match.start()
         match.phase = Phase.SECOND_HALF
+        match._period_number = 2
+        match._period_start_seconds = 2700
         match._ends_switched = True
         match.elapsed_seconds = 4000
         return match

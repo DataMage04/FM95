@@ -15,14 +15,18 @@ class InjuryConfig:
     probability_per_second: float = .000005
     foul_injury_probability: float = .05
     fatigue_risk_strength: float = 1.0
+    temporary_probability: float = 0.0
+    treatment_seconds: int = 60
 
     def __post_init__(self):
         if type(self.enabled) is not bool:
             raise ValueError("Injuries enabled must be boolean.")
-        for name in ("probability_per_second", "foul_injury_probability"):
+        for name in ("probability_per_second", "foul_injury_probability", "temporary_probability"):
             value = getattr(self, name)
             if type(value) not in (int, float) or not isfinite(value) or not 0 <= value <= 1:
                 raise ValueError(f"{name} must be in [0, 1].")
+        if type(self.treatment_seconds) is not int or self.treatment_seconds<0:
+            raise ValueError("Treatment time must be a nonnegative integer.")
         value = self.fatigue_risk_strength
         if type(value) not in (int, float) or not isfinite(value) or value < 0:
             raise ValueError("Fatigue risk strength must be finite and nonnegative.")

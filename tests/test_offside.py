@@ -215,7 +215,7 @@ class OffsideTests(unittest.TestCase):
         match = run_match(Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95))
         for own, other in ((match.statistics("h"), match.statistics("a")),
                            (match.statistics("a"), match.statistics("h"))):
-            self.assertEqual(own.offsides+own.restart_second_touches, other.indirect_free_kicks_awarded)
+            self.assertEqual(own.offsides+own.restart_second_touches+own.indirect_rule_offences, other.indirect_free_kicks_awarded)
             self.assertGreaterEqual(own.offsides, own.passes_offside)
             self.assertLessEqual(own.indirect_free_kicks_taken, own.indirect_free_kicks_awarded)
         summary = run_batch(1, offside_config=OffsideConfig(enabled=False))
