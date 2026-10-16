@@ -1,0 +1,143 @@
+{
+  "passed": true,
+  "purpose": "consistency and determinism; no calibration",
+  "scenarios": 8,
+  "simulations": 16,
+  "base_seed": 95,
+  "parameters": {},
+  "player_differentiation": {
+    "enabled": true,
+    "decision_strength": 0.8,
+    "synthetic_strength_range": [
+      0.1,
+      0.9
+    ]
+  },
+  "features": {
+    "added_time": true,
+    "woodwork": true,
+    "temporary_treatment": true,
+    "off_ball_screening": true,
+    "automatic_substitutions": true
+  },
+  "player_decision_events": 4827,
+  "press_attempts": 1603,
+  "substitutions": 52,
+  "completed": 8,
+  "abandoned": 0,
+  "state_checks": 91226,
+  "results": [
+    {
+      "seed": 95,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5720,
+      "state_checks": 11442,
+      "replay_sha256": "723db079f3b89dada88ad4405ff9a4469ca5b598445d4bcf1534a13edf5838bb",
+      "player_decision_events": 627,
+      "press_attempts": 238,
+      "substitutions": 7,
+      "temporary_treatments": 2,
+      "treatment_returns": 1,
+      "woodwork_contacts": 1
+    },
+    {
+      "seed": 96,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5700,
+      "state_checks": 11402,
+      "replay_sha256": "26aa116dfb83176fdef373ea09db655e16888726e411dc8b007bb7e7d4056002",
+      "player_decision_events": 526,
+      "press_attempts": 224,
+      "substitutions": 7,
+      "temporary_treatments": 3,
+      "treatment_returns": 2,
+      "woodwork_contacts": 1
+    },
+    {
+      "seed": 97,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5640,
+      "state_checks": 11282,
+      "replay_sha256": "0a68f2bc9406fc61b34a69e8c9fa52aa49bb4e51d422d3188a20a6451556f374",
+      "player_decision_events": 582,
+      "press_attempts": 167,
+      "substitutions": 7,
+      "temporary_treatments": 2,
+      "treatment_returns": 2,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 98,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5705,
+      "state_checks": 11412,
+      "replay_sha256": "785f92282068e50acaa04c73c2212335828eede1853cff605b9c57fe04a7f4ac",
+      "player_decision_events": 638,
+      "press_attempts": 187,
+      "substitutions": 6,
+      "temporary_treatments": 1,
+      "treatment_returns": 1,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 99,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5720,
+      "state_checks": 11442,
+      "replay_sha256": "05e3847794cb0778f489e58098974aa10653b16be87b3e7fa6dfef2950e38987",
+      "player_decision_events": 658,
+      "press_attempts": 229,
+      "substitutions": 5,
+      "temporary_treatments": 2,
+      "treatment_returns": 2,
+      "woodwork_contacts": 1
+    },
+    {
+      "seed": 100,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5730,
+      "state_checks": 11462,
+      "replay_sha256": "a21e06ff5ae8f7ce49684cd027a010a49f0b8f13dc3df39d45d9edbe8bbdde40",
+      "player_decision_events": 553,
+      "press_attempts": 222,
+      "substitutions": 6,
+      "temporary_treatments": 2,
+      "treatment_returns": 2,
+      "woodwork_contacts": 1
+    },
+    {
+      "seed": 101,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5645,
+      "state_checks": 11292,
+      "replay_sha256": "36757534717a84a5a72accc86432cfe0a1f1509573cdeda11c15bc0641db9d2a",
+      "player_decision_events": 571,
+      "press_attempts": 161,
+      "substitutions": 6,
+      "temporary_treatments": 1,
+      "treatment_returns": 1,
+      "woodwork_contacts": 1
+    },
+    {
+      "seed": 102,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5745,
+      "state_checks": 11492,
+      "replay_sha256": "e6fb4d5a749f8929318a8ec40250da6b87f3ebb5f3d112655e87a272cd6e5b56",
+      "player_decision_events": 672,
+      "press_attempts": 175,
+      "substitutions": 8,
+      "temporary_treatments": 1,
+      "treatment_returns": 1,
+      "woodwork_contacts": 0
+    }
+  ]
+}

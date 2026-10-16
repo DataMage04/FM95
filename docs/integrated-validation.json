@@ -1,0 +1,107 @@
+{
+  "passed": true,
+  "purpose": "consistency and determinism; no calibration",
+  "scenarios": 8,
+  "simulations": 16,
+  "base_seed": 95,
+  "features": {
+    "added_time": true,
+    "woodwork": true,
+    "temporary_treatment": true,
+    "off_ball_screening": true,
+    "automatic_substitutions": true
+  },
+  "completed": 8,
+  "abandoned": 0,
+  "state_checks": 91234,
+  "results": [
+    {
+      "seed": 95,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5760,
+      "state_checks": 11522,
+      "replay_sha256": "274e71149b791258444a6a4501eca04f641bd74117837cdbd8c9d17e83ce3f56",
+      "temporary_treatments": 1,
+      "treatment_returns": 1,
+      "woodwork_contacts": 1
+    },
+    {
+      "seed": 96,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5780,
+      "state_checks": 11562,
+      "replay_sha256": "a35ec6181f4ebbf48a3b081edf778c3917874c122dc3f52314ae9bfe4f7015d6",
+      "temporary_treatments": 2,
+      "treatment_returns": 1,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 97,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5705,
+      "state_checks": 11412,
+      "replay_sha256": "b613b2de3f71b0ee8bad93889470636e522a01a4a4593fc2d26c7c1396a789d6",
+      "temporary_treatments": 2,
+      "treatment_returns": 2,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 98,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5700,
+      "state_checks": 11402,
+      "replay_sha256": "6fea2a50f7855a55945d44a59c6ba930159c79ea41f41f35f3c31b1ac94c0217",
+      "temporary_treatments": 1,
+      "treatment_returns": 1,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 99,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5760,
+      "state_checks": 11522,
+      "replay_sha256": "204a51bccd7066ae12e16bf2144607c9ec82f6f5bc0157b0cf154dabe6b74c01",
+      "temporary_treatments": 2,
+      "treatment_returns": 2,
+      "woodwork_contacts": 1
+    },
+    {
+      "seed": 100,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5744,
+      "state_checks": 11490,
+      "replay_sha256": "f5a047f0e40f413675b6cc55fec4dfb3841d024c94e547c2c2dbfa5f7d8b672e",
+      "temporary_treatments": 4,
+      "treatment_returns": 4,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 101,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5580,
+      "state_checks": 11162,
+      "replay_sha256": "a40ee87f248356d1138ef67a7ce091af9aa6ac240568418d37d50151871de944",
+      "temporary_treatments": 2,
+      "treatment_returns": 2,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 102,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5580,
+      "state_checks": 11162,
+      "replay_sha256": "ce99f54519a66e271ec74c787b3e5d1da303d85aadd5177fbf5cee001f56526c",
+      "temporary_treatments": 1,
+      "treatment_returns": 1,
+      "woodwork_contacts": 2
+    }
+  ]
+}
