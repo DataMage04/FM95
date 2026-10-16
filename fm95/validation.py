@@ -20,6 +20,8 @@ from fm95.substitution_policy import AutoSubstitutionConfig
 from fm95.tactics import preset
 from fm95.timekeeping import AddedTimeConfig
 from fm95.woodwork import WoodworkConfig
+from fm95.player_factory import generate_team
+from fm95.decisions import DecisionConfig
 
 
 def require(condition,message):
@@ -69,21 +71,30 @@ def signature(match):
     return hashlib.sha256(json.dumps(payload,sort_keys=True,default=str).encode()).hexdigest()
 
 
-def scenario(seed,index,profile=None):
+def scenario(seed,index,profile=None,*,generated_squads=False,decision_strength=.5):
     from fm95.calibration import profile_configs
     styles=('balanced','pressing','possession','direct')
-    home_attributes=Attributes(passing=.8 if index%2==0 else .2,stamina=.3) if index>=4 else Attributes()
-    away_attributes=Attributes(passing=.2 if index%2==0 else .8,stamina=.9) if index>=4 else Attributes()
-    match=Match(demo_team('home','Home',include_bench=True,attributes=home_attributes),
-        demo_team('away','Away',include_bench=True,attributes=away_attributes),seed=seed,
+    if generated_squads:
+        low,high=(.1,.9) if index>=4 else (.3,.7)
+        home=generate_team('home','Home',seed=seed,team_strength=high if index%2==0 else low)
+        away=generate_team('away','Away',seed=seed,team_strength=low if index%2==0 else high)
+    else:
+        home_attributes=Attributes(passing=.8 if index%2==0 else .2,stamina=.3) if index>=4 else Attributes()
+        away_attributes=Attributes(passing=.2 if index%2==0 else .8,stamina=.9) if index>=4 else Attributes()
+        home=demo_team('home','Home',include_bench=True,attributes=home_attributes)
+        away=demo_team('away','Away',include_bench=True,attributes=away_attributes)
+    match=Match(home,away,seed=seed,decision_config=DecisionConfig(decision_strength),
         home_tactics=preset(styles[index%4]),away_tactics=preset(styles[(index+1)%4]),
         injury_config=InjuryConfig(enabled=True,temporary_probability=.5),
         auto_substitution_config=AutoSubstitutionConfig(enabled=True),added_time_config=AddedTimeConfig(enabled=True),
         woodwork_config=WoodworkConfig(enabled=True),offside_config=OffsideConfig(screening_enabled=True),
         **profile_configs(profile or {}))
     originals=match.home,match.away
-    match.set_player_duty('home','home-9',Duty.ATTACK)
-    match.set_player_duty('home','home-7',Duty.SUPPORT)
+    active_home=match.active_players('home')
+    striker=next(p for p in active_home if p.position==Position.ST)
+    midfielder=next(p for p in active_home if p.position in (Position.CM,Position.AM))
+    match.set_player_duty('home',striker.id,Duty.ATTACK)
+    match.set_player_duty('home',midfielder.id,Duty.SUPPORT)
     match.start()
     checks=0
     while match.phase not in (Phase.FULL_TIME,Phase.ABANDONED):
@@ -110,25 +121,42 @@ def scenario(seed,index,profile=None):
         validate_state(match);checks+=1
     validate_statistics(match)
     require((match.home,match.away)==originals,'Natural squad mutation')
-    return match,checks
+    player_decisions=sum(event.kind=='player_decision' for event in match.events)
+    press_attempts=sum(event.kind.startswith('press_') for event in match.events)
+    substitutions=sum(event.kind=='substitution' for event in match.events)
+    return match,checks,{'player_decision_events':player_decisions,
+                         'press_attempts':press_attempts,'substitutions':substitutions}
 
 
-def run_validation(matches=8,seed=95,profile=None):
+def run_validation(matches=8,seed=95,profile=None,*,generated_squads=False,decision_strength=.5):
     if type(matches) is not int or matches<1 or type(seed) is not int:raise ValueError('Positive match count and integer seed required.')
+    if type(generated_squads) is not bool:raise ValueError('generated_squads must be boolean.')
+    DecisionConfig(decision_strength)
     rows=[]
     for index in range(matches):
-        first,checks=scenario(seed+index,index,profile)
-        second,replay_checks=scenario(seed+index,index,profile)
+        first,checks,features=scenario(seed+index,index,profile,
+            generated_squads=generated_squads,decision_strength=decision_strength)
+        second,replay_checks,_=scenario(seed+index,index,profile,
+            generated_squads=generated_squads,decision_strength=decision_strength)
         digest=signature(first)
         require(digest==signature(second),'Replay divergence')
         rows.append({'seed':seed+index,'attribute_range_stress':index>=4,'phase':first.phase.value,'elapsed_seconds':first.elapsed_seconds,
-                     'state_checks':checks+replay_checks,'replay_sha256':digest,
+                     'state_checks':checks+replay_checks,'replay_sha256':digest,**features,
                      'temporary_treatments':sum(first.statistics(t.id).temporary_treatments for t in (first.home,first.away)),
                      'treatment_returns':sum(first.statistics(t.id).treatment_returns for t in (first.home,first.away)),
                      'woodwork_contacts':sum(first.statistics(t.id).woodwork_contacts for t in (first.home,first.away))})
+    if generated_squads:
+        require(sum(row['player_decision_events'] for row in rows)>0,'No player decision choices were exercised')
+        require(sum(row['press_attempts'] for row in rows)>0,'No player pressing choices were exercised')
+        require(sum(row['substitutions'] for row in rows)>0,'No generated-player substitutions were exercised')
     return {'passed':True,'purpose':'consistency and determinism; no calibration',
             'scenarios':matches,'simulations':2*matches,'base_seed':seed,'parameters':profile or {},
+            'player_differentiation':{'enabled':generated_squads,'decision_strength':decision_strength,
+                                      'synthetic_strength_range':[.1,.9] if generated_squads else None},
             'features':{'added_time':True,'woodwork':True,'temporary_treatment':True,'off_ball_screening':True,'automatic_substitutions':True},
+            'player_decision_events':sum(row['player_decision_events'] for row in rows),
+            'press_attempts':sum(row['press_attempts'] for row in rows),
+            'substitutions':sum(row['substitutions'] for row in rows),
             'completed':sum(r['phase']=='full_time' for r in rows),'abandoned':sum(r['phase']=='abandoned' for r in rows),
             'state_checks':sum(r['state_checks'] for r in rows),'results':rows}
 
@@ -137,9 +165,12 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--matches',type=int,default=8);parser.add_argument('--seed',type=int,default=95)
     parser.add_argument('--profile',choices=('prototype','pl2015'),default='prototype')
+    parser.add_argument('--generated-squads',action='store_true',help='Validate role-shaped synthetic players and their choices')
+    parser.add_argument('--decision-strength',type=float,default=.5)
     parser.add_argument('--json',action='store_true');args=parser.parse_args()
     from fm95.calibration import load_profile
-    result=run_validation(args.matches,args.seed,load_profile() if args.profile=='pl2015' else None)
+    result=run_validation(args.matches,args.seed,load_profile() if args.profile=='pl2015' else None,
+                          generated_squads=args.generated_squads,decision_strength=args.decision_strength)
     print(json.dumps(result,indent=2) if args.json else f"Passed {result['simulations']} simulations and {result['state_checks']} state checks.")
 
 if __name__=='__main__':main()

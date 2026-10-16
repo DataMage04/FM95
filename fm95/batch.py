@@ -26,6 +26,8 @@ from fm95.offside import OffsideConfig
 from fm95.through_balls import ThroughBallConfig
 from fm95.goalkeeping import KeeperCrossConfig
 from fm95.demo import demo_team
+from fm95.player_factory import generate_team
+from fm95.decisions import DecisionConfig
 from fm95.match import Match, Phase
 
 
@@ -59,13 +61,19 @@ def run_batch(matches: int = 200, seed: int = 95,
               attack_config: AttackConfig | None = None,
               transition_config: TransitionConfig | None = None,
               added_time_config: AddedTimeConfig | None = None,
-              woodwork_config: WoodworkConfig | None = None) -> dict:
+              woodwork_config: WoodworkConfig | None = None,
+              decision_config: DecisionConfig | None = None,
+              generated_squads: bool = False, home_strength: float = .5,
+              away_strength: float = .5) -> dict:
     """Match i uses seed+i; retain aggregates only, not every match's event log."""
     if type(matches) is not int or matches < 1:
         raise ValueError("Match count must be a positive integer.")
     if type(seed) is not int:
         raise ValueError("Base seed must be an integer.")
+    if type(generated_squads) is not bool:
+        raise ValueError("generated_squads must be boolean.")
     woodwork_config = woodwork_config if woodwork_config is not None else WoodworkConfig()
+    decision_config = decision_config if decision_config is not None else DecisionConfig()
     added_time_config = added_time_config if added_time_config is not None else AddedTimeConfig()
     transition_config = transition_config if transition_config is not None else TransitionConfig()
     attack_config = attack_config if attack_config is not None else AttackConfig()
@@ -85,8 +93,15 @@ def run_batch(matches: int = 200, seed: int = 95,
     injury_config = injury_config if injury_config is not None else InjuryConfig()
     home_tactics = home_tactics if home_tactics is not None else TeamTactics()
     away_tactics = away_tactics if away_tactics is not None else TeamTactics()
-    teams = (demo_team("home", "Home", include_bench=auto_substitution_config.enabled or injury_config.enabled),
-             demo_team("away", "Away", include_bench=auto_substitution_config.enabled or injury_config.enabled))
+    include_bench = auto_substitution_config.enabled or injury_config.enabled
+    if generated_squads:
+        teams = (generate_team("home", "Home", seed=seed, team_strength=home_strength, include_bench=include_bench),
+                 generate_team("away", "Away", seed=seed, team_strength=away_strength, include_bench=include_bench))
+    else:
+        if home_strength != .5 or away_strength != .5:
+            raise ValueError("Strength controls require generated_squads=True.")
+        teams = (demo_team("home", "Home", include_bench=include_bench),
+                 demo_team("away", "Away", include_bench=include_bench))
     initial = Match(*teams)
     totals = {team.id: Counter({key: 0 for key in asdict(initial.statistics(team.id))
                                if key != "team_id"}) for team in teams}
@@ -104,7 +119,8 @@ def run_batch(matches: int = 200, seed: int = 95,
                                 substitution_config=substitution_config, fatigue_config=fatigue_config,
                                 auto_substitution_config=auto_substitution_config, injury_config=injury_config,
                                 home_tactics=home_tactics, away_tactics=away_tactics, attack_config=attack_config,
-                                transition_config=transition_config, added_time_config=added_time_config,woodwork_config=woodwork_config))
+                                transition_config=transition_config, added_time_config=added_time_config,
+                                woodwork_config=woodwork_config, decision_config=decision_config))
         if match.phase == Phase.ABANDONED:
             outcomes["abandoned"] += 1
             continue
@@ -130,6 +146,11 @@ def run_batch(matches: int = 200, seed: int = 95,
         )
     return {
         "matches": matches, "completed_matches": completed,
+        "squad_generation": {"enabled": generated_squads,
+                             "home_strength": home_strength if generated_squads else None,
+                             "away_strength": away_strength if generated_squads else None,
+                             "seed": seed if generated_squads else None},
+        "decision_configuration": asdict(decision_config),
         "base_seed": seed, "configuration": asdict(config),
         "woodwork_configuration": asdict(woodwork_config),
         "added_time_configuration": asdict(added_time_config),
@@ -165,6 +186,14 @@ def main():
     parser.add_argument("--seed", type=int, default=95)
     parser.add_argument("--profile", choices=("prototype", "pl2015"), default="prototype",
                         help="Use the locally fitted StatsBomb PL 2015/16 aggregate research profile")
+    parser.add_argument("--generated-squads", action="store_true",
+                        help="Generate reproducible, position-specialized synthetic player attributes")
+    parser.add_argument("--decision-strength", type=float, default=.5,
+                        help="How strongly player tendencies shape open-play choices (0 disables, provisional)")
+    parser.add_argument("--home-strength", type=float, default=.5,
+                        help="Synthetic squad mean-quality control from 0 to 1 (development only)")
+    parser.add_argument("--away-strength", type=float, default=.5,
+                        help="Synthetic squad mean-quality control from 0 to 1 (development only)")
     parser.add_argument("--context-strength", type=float, default=None,
                         help="Situational effects from 0 (neutral) to 1 (default)")
     parser.add_argument("--json", action="store_true", help="Print machine-readable summary")
@@ -195,6 +224,10 @@ def main():
         parser.error("--matches must be positive")
     if args.context_strength is not None and not 0 <= args.context_strength <= 1:
         parser.error("--context-strength must be between 0 and 1")
+    if not 0 <= args.home_strength <= 1 or not 0 <= args.away_strength <= 1:
+        parser.error("Synthetic team strengths must be between 0 and 1")
+    if not 0 <= args.decision_strength <= 1:
+        parser.error("Decision strength must be between 0 and 1")
     from fm95.calibration import load_profile, profile_configs
     fitted = args.profile == "pl2015"
     base = profile_configs(load_profile() if fitted else {})
@@ -217,7 +250,9 @@ def main():
                         home_tactics=preset(args.home_style), away_tactics=preset(args.away_style),
                         attack_config=AttackConfig(enabled=not args.no_attacking_movement),
                         transition_config=TransitionConfig(enabled=not args.no_transitions),
-                        added_time_config=AddedTimeConfig(enabled=args.added_time or fitted),woodwork_config=WoodworkConfig(enabled=args.woodwork or fitted))
+                        added_time_config=AddedTimeConfig(enabled=args.added_time or fitted),woodwork_config=WoodworkConfig(enabled=args.woodwork or fitted),
+                        decision_config=DecisionConfig(args.decision_strength),
+                        generated_squads=args.generated_squads,home_strength=args.home_strength,away_strength=args.away_strength)
     summary["calibration_profile"] = args.profile
     if args.json:
         print(json.dumps(summary, indent=2))

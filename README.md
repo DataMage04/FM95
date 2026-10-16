@@ -381,6 +381,44 @@ conversion remains noisy. The held-out data was not used for further tuning.
 The source terms support research/analysis; this preset does not grant commercial
 data rights. Raw events stay in the ignored local cache.
 
+## Milestone 2: player and team differences
+
+Milestone 2's player-differentiation foundation is implemented and integrated-tested.
+The reproducible synthetic squad generator creates an 18-player roster (4-3-3 starting
+XI plus seven substitutes), varies individual execution skills, and adds provisional
+position aptitudes for goalkeepers, defenders, fullbacks, midfielders, creators,
+wingers and strikers. It stores no overall rating.
+
+```sh
+python -m fm95.batch --generated-squads --home-strength .7 --away-strength .3 --decision-strength .7 --matches 20 --seed 95 --json
+```
+
+The seed and player identifiers determine each player's attributes, so rerunning the
+same setup reproduces the squad. The strength controls shift the synthetic team's
+mean attribute level; they are experiment controls, not calibrated ratings or
+estimates for real clubs. Existing `demo_team()` remains the neutral equal-ability
+fixture for match-engine checks. Player decisions have immutable tendencies for
+shooting, dribbling, crossing, through balls, pass directness and pressing. They bias
+choices after team instructions, while attributes still resolve execution. Pressing
+tendency affects a defender's willingness to attempt a press, not the chance of
+winning one. Set `--decision-strength 0` to isolate the neutral decision layer;
+the default `.5` is provisional. Substitutes retain their own generated tendencies.
+
+The integrated acceptance command exercises generated players, tactics, substitutions,
+temporary treatment and return, dismissal, added time, woodwork, off-ball screening,
+low/high synthetic team strengths, statistical reconciliation and exact seeded replay:
+
+```sh
+python -m fm95.validation --matches 8 --seed 95 --generated-squads --decision-strength .8 --json
+```
+
+The checked-in [Milestone 2 validation report](docs/milestone2-validation.json) records
+eight completed scenarios, 16 simulations, 91,226 state checks, 4,827 player decision
+events, 1,603 press attempts and 52 substitutions. This validates implementation
+consistency and determinism, not empirical football realism. Player attribute and
+tendency distributions remain synthetic and uncalibrated; later work can fit their
+ranges and effects to suitable player-level data.
+
 ## Remaining Milestone 1 work
 
 The requested goal-handling, represented rules, treatment/off-ball interactions
