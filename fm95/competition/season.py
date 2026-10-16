@@ -9,6 +9,8 @@ from typing import Callable, Mapping
 from fm95.match.simulation import run_match
 from fm95.match.engine import Match, Phase
 from fm95.teams.model import Team
+from fm95.teams.club import Club, SquadSelection
+from fm95.competition.manager import Manager, ManagerAssignment, cpu_selection
 from fm95.match.statistics import TeamStats
 from fm95.match.tactics import TeamTactics
 
@@ -30,6 +32,10 @@ class FixtureResult:
     home_stats: TeamStats
     away_stats: TeamStats
     elapsed_seconds: int
+    home_lineup: tuple[str, ...] = ()
+    away_lineup: tuple[str, ...] = ()
+    home_tactics: TeamTactics = TeamTactics()
+    away_tactics: TeamTactics = TeamTactics()
 
 
 @dataclass(frozen=True)
@@ -65,9 +71,9 @@ class Season:
                               ("loss", points_for_loss)):
             if type(points) is not int or points < 0:
                 raise ValueError(f"Points for {label} must be a non-negative integer.")
-        teams = tuple(teams)
-        if len(teams) < 2 or any(not isinstance(team, Team) for team in teams):
-            raise ValueError("A season requires at least two match-ready Team instances.")
+        teams = tuple(Club.from_team(team) if isinstance(team, Team) else team for team in teams)
+        if len(teams) < 2 or any(not isinstance(team, Club) for team in teams):
+            raise ValueError("A season requires at least two Club instances or legacy Team instances.")
         if len({team.id for team in teams}) != len(teams):
             raise ValueError("Season team IDs must be unique.")
         if any(not isinstance(team.id, str) or not team.id.strip()
@@ -87,7 +93,29 @@ class Season:
         self._fixture_by_id = {fixture.id: fixture for fixture in self.fixtures}
         self._results: dict[str, FixtureResult] = {}
         self._run_settings: dict | None = None
+        self.manager_assignment: ManagerAssignment | None = None
         self.validate()
+
+    def assign_manager(self, manager: Manager, team_id: str, *,
+                       selection: SquadSelection | None = None,
+                       tactics: TeamTactics | None = None) -> ManagerAssignment:
+        """Assign the offline manager to one club before any fixture is played."""
+        if self._results or self._run_settings is not None:
+            raise ValueError("Manager assignment must be set before the first fixture.")
+        if not isinstance(manager, Manager):
+            raise ValueError("manager must be a Manager instance.")
+        if team_id not in self._team_by_id:
+            raise ValueError(f"Unknown managed club: {team_id}.")
+        club = self._team_by_id[team_id]
+        selection = selection or SquadSelection(club.default_lineup_ids)
+        club.to_team(selection)  # Validate eligibility and goalkeeper coverage.
+        tactics = tactics or TeamTactics()
+        if not isinstance(tactics, TeamTactics):
+            raise ValueError("Manager tactics must be a TeamTactics instance.")
+        if self.manager_assignment is not None:
+            raise ValueError("A season can have only one manager assignment.")
+        self.manager_assignment = ManagerAssignment(manager, team_id, selection, tactics)
+        return self.manager_assignment
 
     @property
     def results(self) -> tuple[FixtureResult, ...]:
@@ -138,22 +166,42 @@ class Season:
         if match_options is not None and not isinstance(match_options, Mapping):
             raise ValueError("Match options must be a mapping of Match arguments.")
         requested_tactics = dict(tactics)
+        if self.manager_assignment is not None:
+            managed_id = self.manager_assignment.team_id
+            requested_tactics.setdefault(managed_id, self.manager_assignment.tactics)
         requested_options = dict(match_options or {})
         if self._run_settings is None:
             effective_tactics = requested_tactics
             options = requested_options
         else:
-            effective_tactics = self._run_settings["tactics"]
+            effective_tactics = dict(self._run_settings["tactics"])
             options = self._run_settings["match_options"]
-            if tactics_were_supplied and requested_tactics != effective_tactics:
-                raise ValueError("Season tactics are fixed after the first fixture; omit them to resume saved settings.")
+            manager_id = self.manager_assignment.team_id if self.manager_assignment else None
+            comparable_requested = {key: value for key, value in requested_tactics.items()
+                                    if key != manager_id}
+            comparable_saved = {key: value for key, value in effective_tactics.items()
+                                if key != manager_id}
+            if tactics_were_supplied and comparable_requested != comparable_saved:
+                raise ValueError("Non-manager season tactics are fixed after the first fixture; omit them to resume saved settings.")
+            if self.manager_assignment is not None and self.manager_assignment.team_id in dict(tactics or {}):
+                effective_tactics[self.manager_assignment.team_id] = dict(tactics)[self.manager_assignment.team_id]
             if match_options is not None and requested_options != options:
                 raise ValueError("Season match settings are fixed after the first fixture; omit them to resume saved settings.")
         reserved = {"home", "away", "seed", "home_tactics", "away_tactics"} & options.keys()
         if reserved:
             raise ValueError(f"Match options cannot override fixture inputs: {sorted(reserved)}")
-        home = self._team_by_id[fixture.home_team_id]
-        away = self._team_by_id[fixture.away_team_id]
+        home_club = self._team_by_id[fixture.home_team_id]
+        away_club = self._team_by_id[fixture.away_team_id]
+        home_selection = (self.manager_assignment.selection if self.manager_assignment
+                          and self.manager_assignment.team_id == home_club.id
+                          else SquadSelection(home_club.default_lineup_ids) if self.manager_assignment is None
+                          else cpu_selection(home_club, fixture.seed))
+        away_selection = (self.manager_assignment.selection if self.manager_assignment
+                          and self.manager_assignment.team_id == away_club.id
+                          else SquadSelection(away_club.default_lineup_ids) if self.manager_assignment is None
+                          else cpu_selection(away_club, fixture.seed))
+        home = home_club.to_team(home_selection)
+        away = away_club.to_team(away_selection)
         match = Match(home, away, seed=fixture.seed,
                       home_tactics=effective_tactics.get(home.id),
                       away_tactics=effective_tactics.get(away.id), **options)
@@ -167,6 +215,10 @@ class Season:
             home_stats=match.statistics(home.id),
             away_stats=match.statistics(away.id),
             elapsed_seconds=match.elapsed_seconds,
+            home_lineup=tuple(player.id for player in home.lineup),
+            away_lineup=tuple(player.id for player in away.lineup),
+            home_tactics=effective_tactics.get(home.id, TeamTactics()),
+            away_tactics=effective_tactics.get(away.id, TeamTactics()),
         )
         self._results[fixture.id] = result
         if self._run_settings is None:
@@ -249,6 +301,13 @@ class Season:
                 raise ValueError("Season run settings are malformed.")
             if set(self._run_settings["tactics"]) - self._team_by_id.keys():
                 raise ValueError("Season tactics reference an unknown team.")
+        if self.manager_assignment is not None:
+            assignment = self.manager_assignment
+            if (not isinstance(assignment.manager, Manager) or assignment.team_id not in self._team_by_id
+                    or not isinstance(assignment.selection, SquadSelection)
+                    or not isinstance(assignment.tactics, TeamTactics)):
+                raise ValueError("Manager assignment is malformed.")
+            self._team_by_id[assignment.team_id].to_team(assignment.selection)
         pair_venues: dict[tuple[str, str], dict[tuple[str, str], int]] = {}
         teams_per_day: dict[int, set[str]] = {}
         for fixture in self.fixtures:
@@ -290,12 +349,21 @@ class Season:
                     or result.home_stats.goals != result.home_goals
                     or result.away_stats.goals != result.away_goals):
                 raise ValueError(f"Result for {fixture_id} does not reconcile with match statistics.")
+            if not isinstance(result.home_tactics, TeamTactics) or not isinstance(result.away_tactics, TeamTactics):
+                raise ValueError(f"Result for {fixture_id} has invalid tactical choices.")
+            if result.home_lineup or result.away_lineup:
+                for team_id, lineup in ((fixture.home_team_id, result.home_lineup),
+                                        (fixture.away_team_id, result.away_lineup)):
+                    if (len(lineup) != 11 or len(set(lineup)) != 11
+                            or not set(lineup) <= {player.id for player in self._team_by_id[team_id].players}
+                            or sum(self._team_by_id[team_id]._by_id[pid].is_goalkeeper for pid in lineup) != 1):
+                        raise ValueError(f"Result for {fixture_id} has an invalid saved lineup.")
 
     @classmethod
     def _restore(cls, *, name: str, teams: tuple[Team, ...], seed: int,
                  points_for_win: int, points_for_draw: int, points_for_loss: int,
                  fixtures: tuple[Fixture, ...], results: tuple[FixtureResult, ...],
-                 run_settings: dict | None) -> "Season":
+                 run_settings: dict | None, manager_assignment: ManagerAssignment | None = None) -> "Season":
         """Rebuild validated persisted state without regenerating or losing results."""
         season = cls(name, teams, seed=seed, points_for_win=points_for_win,
                      points_for_draw=points_for_draw, points_for_loss=points_for_loss)
@@ -305,6 +373,7 @@ class Season:
         if len(season._results) != len(results):
             raise ValueError("Save contains duplicate fixture results.")
         season._run_settings = run_settings
+        season.manager_assignment = manager_assignment
         season.validate()
         return season
 

@@ -34,11 +34,13 @@ from fm95.players.attributes import Attributes
 from fm95.players.decisions import DecisionConfig, DecisionTendencies
 from fm95.players.model import Player
 from fm95.teams.model import Team
+from fm95.teams.club import Club, SquadSelection
 from fm95.competition.season import Fixture, FixtureResult, Season
+from fm95.competition.manager import Manager, ManagerAssignment
 
 
 SAVE_FORMAT = "fm95-season"
-SAVE_VERSION = 1
+SAVE_VERSION = 2
 
 MATCH_OPTION_TYPES = {
     "action_config": ActionConfig,
@@ -103,17 +105,24 @@ def load_season(path: str | os.PathLike) -> Season:
             data = json.load(stream)
     except json.JSONDecodeError as exc:
         raise ValueError(f"Season save is not valid JSON: {exc}") from exc
-    _require_object(data, {"format", "version", "season", "rules", "teams", "fixtures", "results", "settings"}, "save")
+    if not isinstance(data, dict) or set(data) not in (
+            {"format", "version", "season", "rules", "teams", "fixtures", "results", "settings"},
+            {"format", "version", "season", "rules", "teams", "fixtures", "results", "settings", "manager"}):
+        raise ValueError("Save keys are invalid.")
+    if type(data.get("version")) is int and data["version"] >= 2 and "manager" not in data:
+        raise ValueError("Version 2 season saves must contain a manager field.")
     if data["format"] != SAVE_FORMAT:
         raise ValueError("File is not an FM95 season save.")
-    if type(data["version"]) is not int or data["version"] != SAVE_VERSION:
+    if type(data["version"]) is not int or data["version"] not in (1, SAVE_VERSION):
         raise ValueError(f"Unsupported season save version: {data['version']!r}.")
 
     season_data = _require_object(data["season"], {"name", "seed"}, "season")
     rules = _require_object(data["rules"], {"points_for_win", "points_for_draw", "points_for_loss"}, "rules")
-    teams = tuple(_team_from_data(item) for item in _require_list(data["teams"], "teams"))
+    teams = tuple(_team_from_data(item) if data["version"] == 1 else _club_from_data(item)
+                  for item in _require_list(data["teams"], "teams"))
     fixtures = tuple(_fixture_from_data(item) for item in _require_list(data["fixtures"], "fixtures"))
-    results = tuple(_result_from_data(item) for item in _require_list(data["results"], "results"))
+    results = tuple(_result_from_data(item, version=data["version"])
+                    for item in _require_list(data["results"], "results"))
     settings = (_settings_from_data(data["settings"], {team.id for team in teams})
                 if data["settings"] is not None else None)
     return Season._restore(
@@ -121,6 +130,8 @@ def load_season(path: str | os.PathLike) -> Season:
         points_for_win=rules["points_for_win"], points_for_draw=rules["points_for_draw"],
         points_for_loss=rules["points_for_loss"], fixtures=fixtures, results=results,
         run_settings=settings,
+        manager_assignment=(_manager_from_data(data["manager"], {team.id: team for team in teams})
+                            if data.get("manager") is not None else None),
     )
 
 
@@ -135,14 +146,59 @@ def _season_to_data(season: Season) -> dict[str, Any]:
             "points_for_draw": season.points_for_draw,
             "points_for_loss": season.points_for_loss,
         },
-        "teams": [_team_to_data(team) for team in season.teams],
+        "teams": [_club_to_data(team) for team in season.teams],
         "fixtures": [asdict(fixture) for fixture in season.fixtures],
         "results": [_result_to_data(result) for result in season.results],
         "settings": None if settings is None else {
             "match_options": {key: _config_to_data(value) for key, value in sorted(settings["match_options"].items())},
             "tactics": {key: _config_to_data(value) for key, value in sorted(settings["tactics"].items())},
         },
+        "manager": _manager_to_data(season.manager_assignment),
     }
+
+
+def _club_to_data(club: Club) -> dict[str, Any]:
+    return {"id": club.id, "name": club.name,
+            "players": [_player_to_data(player) for player in club.players],
+            "default_lineup_ids": list(club.default_lineup_ids)}
+
+
+def _club_from_data(data: Any) -> Club:
+    item = _require_object(data, {"id", "name", "players", "default_lineup_ids"}, "club")
+    ids = item["default_lineup_ids"]
+    if not isinstance(ids, list) or any(not isinstance(pid, str) for pid in ids):
+        raise ValueError("Club default lineup IDs must be a list of strings.")
+    return Club(item["id"], item["name"],
+                tuple(_player_from_data(player) for player in _require_list(item["players"], "players")),
+                tuple(ids))
+
+
+def _manager_to_data(assignment: ManagerAssignment | None) -> dict[str, Any] | None:
+    if assignment is None:
+        return None
+    return {"id": assignment.manager.id, "name": assignment.manager.name,
+            "team_id": assignment.team_id,
+            "starting_xi": list(assignment.selection.starting_xi),
+            "tactics": _config_to_data(assignment.tactics)}
+
+
+def _manager_from_data(data: Any, clubs: dict[str, Club]) -> ManagerAssignment:
+    item = _require_object(data, {"id", "name", "team_id", "starting_xi", "tactics"}, "manager")
+    if any(not isinstance(item[key], str) or not item[key].strip()
+           for key in ("id", "name", "team_id")):
+        raise ValueError("Manager IDs, name, and club ID must be non-empty strings.")
+    xi = item["starting_xi"]
+    if not isinstance(xi, list) or any(not isinstance(pid, str) for pid in xi):
+        raise ValueError("Manager starting XI must be a list of player IDs.")
+    tactics = _config_from_data(item["tactics"])
+    if not isinstance(tactics, TeamTactics):
+        raise ValueError("Manager tactics have the wrong configuration type.")
+    assignment = ManagerAssignment(Manager(item["id"], item["name"]), item["team_id"],
+                                   SquadSelection(tuple(xi)), tactics)
+    if assignment.team_id not in clubs:
+        raise ValueError("Manager assignment references an unknown club.")
+    clubs[assignment.team_id].to_team(assignment.selection)
+    return assignment
 
 
 def _team_to_data(team: Team) -> dict[str, Any]:
@@ -208,19 +264,34 @@ def _result_to_data(result: FixtureResult) -> dict[str, Any]:
         "home_stats": asdict(result.home_stats),
         "away_stats": asdict(result.away_stats),
         "elapsed_seconds": result.elapsed_seconds,
+        "home_lineup": list(result.home_lineup),
+        "away_lineup": list(result.away_lineup),
+        "home_tactics": _config_to_data(result.home_tactics),
+        "away_tactics": _config_to_data(result.away_tactics),
     }
 
 
-def _result_from_data(data: Any) -> FixtureResult:
-    item = _require_object(data, {"fixture_id", "home_goals", "away_goals", "home_stats", "away_stats", "elapsed_seconds"}, "result")
+def _result_from_data(data: Any, *, version: int = SAVE_VERSION) -> FixtureResult:
+    keys = {"fixture_id", "home_goals", "away_goals", "home_stats", "away_stats", "elapsed_seconds"}
+    if version >= 2:
+        keys |= {"home_lineup", "away_lineup", "home_tactics", "away_tactics"}
+    item = _require_object(data, keys, "result")
     if (not isinstance(item["fixture_id"], str) or not item["fixture_id"]
             or any(type(item[key]) is not int or item[key] < 0
                    for key in ("home_goals", "away_goals", "elapsed_seconds"))):
         raise ValueError("Result contains an invalid fixture ID, score, or elapsed time.")
+    home_tactics = _config_from_data(item["home_tactics"]) if version >= 2 else TeamTactics()
+    away_tactics = _config_from_data(item["away_tactics"]) if version >= 2 else TeamTactics()
+    if not isinstance(home_tactics, TeamTactics) or not isinstance(away_tactics, TeamTactics):
+        raise ValueError("Saved fixture tactics have the wrong configuration type.")
     return FixtureResult(
         fixture_id=item["fixture_id"], home_goals=item["home_goals"], away_goals=item["away_goals"],
         home_stats=_stats_from_data(item["home_stats"]), away_stats=_stats_from_data(item["away_stats"]),
         elapsed_seconds=item["elapsed_seconds"],
+        home_lineup=tuple(item.get("home_lineup", ())),
+        away_lineup=tuple(item.get("away_lineup", ())),
+        home_tactics=home_tactics,
+        away_tactics=away_tactics,
     )
 
 
