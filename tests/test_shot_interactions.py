@@ -4,6 +4,7 @@ from random import Random
 import unittest
 
 from fm95.actions import ActionConfig, resolve_shot, shot_probabilities
+from fm95.crossing import CrossConfig
 from fm95.batch import run_match, run_batch
 from fm95.defending import DefenseConfig
 from fm95.demo import demo_team
@@ -15,6 +16,7 @@ from fm95.shooting import ShotConfig, blocking_context, rebound_location
 class ShotInteractionTests(unittest.TestCase):
     def make_match(self, config, goal=0):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+            cross_config=CrossConfig(enabled=False),
             out_config=OutOfPlayConfig(enabled=False),
             action_config=ActionConfig(interval_seconds=1, shot_probability=1,
                 on_target_probability=1, goal_given_on_target_probability=goal),

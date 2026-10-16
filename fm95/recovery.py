@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from math import isfinite
 
 from fm95.pitch import Location
+from fm95.offside import OffsideSnapshot
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,8 @@ class LooseBall:
     last_team_id: str | None
     last_player_id: str | None
     reason: str
+    kind: str = "ground"
+    offside: OffsideSnapshot | None = None
 
 
 @dataclass(frozen=True)

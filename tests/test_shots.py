@@ -1,3 +1,4 @@
+from fm95.offside import OffsideConfig
 from fm95.boundaries import OutOfPlayConfig
 import unittest
 from random import Random
@@ -5,6 +6,7 @@ from random import Random
 from fm95.actions import ActionConfig, choose_action
 from fm95.recovery import RecoveryConfig
 from fm95.shooting import ShotConfig
+from fm95.crossing import CrossConfig
 from fm95.match import Match, Phase
 from fm95.pitch import CENTRE, Direction, Zone
 from main import demo_team
@@ -12,10 +14,11 @@ from main import demo_team
 
 class ShotTests(unittest.TestCase):
     def make_match(self, on_target=1, goal=1):
-        return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+        return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95, offside_config=OffsideConfig(enabled=False),
                      recovery_config=RecoveryConfig(enabled=False),
                      out_config=OutOfPlayConfig(enabled=False),
                      shot_config=ShotConfig(enabled=False),
+                     cross_config=CrossConfig(enabled=False),
                      action_config=ActionConfig(interval_seconds=1, shot_probability=1,
                          on_target_probability=on_target,
                          goal_given_on_target_probability=goal))

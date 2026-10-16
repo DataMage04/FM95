@@ -3,13 +3,16 @@ import unittest
 from fm95.match import Match, Phase, Team
 from main import demo_team
 from fm95.actions import ActionConfig
+from fm95.crossing import CrossConfig
+from fm95.set_pieces import SetPieceConfig
 
 
 class MatchTests(unittest.TestCase):
     def setUp(self):
         self.home = demo_team("h", "Home")
         self.away = demo_team("a", "Away")
-        self.match = Match(self.home, self.away, action_config=ActionConfig(shot_probability=0))
+        self.match = Match(self.home, self.away, action_config=ActionConfig(shot_probability=0),
+                           cross_config=CrossConfig(enabled=False), set_piece_config=SetPieceConfig(enabled=False))
 
     def test_lifecycle_boundaries(self):
         self.match.start()

@@ -2,6 +2,7 @@ from dataclasses import replace
 import unittest
 
 from fm95.actions import ActionConfig
+from fm95.crossing import CrossConfig
 from fm95.batch import run_match, run_batch
 from fm95.boundaries import Boundary, BoundaryExit, OutOfPlayConfig, first_exit
 from fm95.defending import DefenseConfig
@@ -14,6 +15,7 @@ from fm95.shooting import ShotConfig
 class BoundaryTests(unittest.TestCase):
     def make_match(self):
         return Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+            cross_config=CrossConfig(enabled=False),
             action_config=ActionConfig(interval_seconds=1, shot_probability=0, dribble_probability=0,
                                       completion_probability=1), defense_config=DefenseConfig(enabled=False))
 
@@ -166,7 +168,7 @@ class BoundaryTests(unittest.TestCase):
         self.assertGreater(match.dead_ball_seconds, 0)
         for own, other in ((home, away), (away, home)):
             self.assertEqual(own.passes_attempted-own.passes_completed,
-                             own.passes_out+own.misplaced_passes+other.interceptions)
+                             own.passes_out+own.misplaced_passes+other.interceptions+own.passes_offside)
             self.assertLessEqual(own.corners_taken, own.corners_awarded)
             self.assertLessEqual(own.throw_ins_taken, own.throw_ins_awarded)
         summary = run_batch(1)

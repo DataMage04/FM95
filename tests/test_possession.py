@@ -1,5 +1,6 @@
 import unittest
 
+from fm95.actions import ActionConfig
 from fm95.match import Match
 from fm95.pitch import CENTRE, Direction, Third, Zone
 from main import demo_team
@@ -7,7 +8,8 @@ from main import demo_team
 
 class PossessionTests(unittest.TestCase):
     def setUp(self):
-        self.match = Match(demo_team("h", "Home"), demo_team("a", "Away"))
+        self.match = Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95,
+                           action_config=ActionConfig(foul_probability=0))
 
     def test_kickoffs_and_stoppages(self):
         match = self.match

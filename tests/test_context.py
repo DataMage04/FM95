@@ -55,19 +55,22 @@ class ContextTests(unittest.TestCase):
     def test_recorded_probabilities_and_xg_sum(self):
         match = run_match(Match(demo_team("h", "Home"), demo_team("a", "Away"), seed=95))
         for event in match.events:
-            if event.kind.startswith("pass_"):
+            if event.kind.startswith("pass_") and event.pass_type != "through":
                 direction = (Direction.RIGHT if (event.team_id == "h") == (event.elapsed_seconds < 2700)
                              else Direction.LEFT)
                 self.assertEqual(event.completion_probability,
                     pass_completion_chance(event.origin, event.intended_zone or event.zone, direction, match.action_config,
-                        pressure=event.pressure, pressure_effect=match.defense_config.pressure_effect))
+                        passing=event.passer_passing, pressure=event.pressure, pressure_effect=match.defense_config.pressure_effect))
         for team in ("h", "a"):
             shots = [e for e in match.events if e.team_id == team
                      and e.kind in ("goal", "shot_saved", "shot_missed", "shot_blocked", "shot_parried")]
             self.assertTrue(shots)
             for event in shots:
+                if event.shot_type in ("penalty", "direct_free_kick"):
+                    continue
                 target, conditional = shot_probabilities(event.zone, match.action_config,
-                    pressure=event.pressure, pressure_effect=match.defense_config.pressure_effect)
+                    finishing=event.shooter_finishing, shot_stopping=event.goalkeeper_shot_stopping,
+                    heading=event.shooter_heading, pressure=event.pressure, pressure_effect=match.defense_config.pressure_effect)
                 self.assertEqual(event.on_target_probability, (1-event.block_probability)*target)
                 self.assertEqual(event.goal_probability, (1-event.block_probability)*target*conditional)
             self.assertAlmostEqual(match.statistics(team).expected_goals,

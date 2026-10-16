@@ -76,7 +76,7 @@ class DefendingTests(unittest.TestCase):
         match.step()
         self.assertEqual([e.kind for e in match.events[-4:]],
                          ["press_foul", "foul", "yellow_card", "free_kick_awarded"])
-        self.assertEqual(match.possession, original)
+        self.assertIsNone(match.possession)
         self.assertEqual(match.pending_restart.location, original.location)
         self.assertEqual(match.statistics("a").pressing_fouls, 1)
         index = len(match.events)

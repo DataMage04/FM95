@@ -133,7 +133,7 @@ class RecoveryTests(unittest.TestCase):
         self.assertAlmostEqual(home.possession_percentage+away.possession_percentage, 100)
         for own, other in ((home, away), (away, home)):
             self.assertEqual(own.passes_attempted-own.passes_completed,
-                             other.interceptions+own.misplaced_passes+own.passes_out)
+                             other.interceptions+own.misplaced_passes+own.passes_out+own.passes_offside)
             self.assertEqual(own.recoveries, sum(e.kind == "ball_recovered" and e.team_id == own.team_id
                                                 for e in match.events))
         summary = run_batch(1)

@@ -56,12 +56,17 @@ def adjust_probability(base: float, multiplier: float, strength: float) -> float
     return base * factor / (1 - base + base * factor)
 
 
+def instruction_multiplier(value: float) -> float:
+    """Provisional odds/pace preference, neutral at .5."""
+    return 2 ** (2*(value-.5))
+
+
 def pass_completion_chance(origin: Zone, destination: Zone, direction: Direction,
                            config: ActionConfig, *, passing: float = 0.5,
                            pressure: float = 0, pressure_effect: float = .4) -> float:
     progress = (destination.column - origin.column) * int(direction)
     if progress > 0:
-        multiplier = 0.75
+        multiplier = 0.75 ** progress
     elif progress < 0:
         multiplier = 1.20
     elif destination == origin:
@@ -78,7 +83,7 @@ def pass_completion_chance(origin: Zone, destination: Zone, direction: Direction
 
 def shot_probabilities(zone: Zone, config: ActionConfig, *, finishing: float = 0.5,
                        shot_stopping: float = 0.5, pressure: float = 0,
-                       pressure_effect: float = .4) -> tuple[float, float]:
+                       pressure_effect: float = .4, heading: float | None = None) -> tuple[float, float]:
     """Return on-target and conditional scoring probabilities before any draws."""
     central = zone.lane == 1
     on_target = adjust_probability(config.on_target_probability,
@@ -86,7 +91,7 @@ def shot_probabilities(zone: Zone, config: ActionConfig, *, finishing: float = 0
     goal_given_target = adjust_probability(config.goal_given_on_target_probability,
                                            1.25 if central else 0.70, config.context_strength)
     on_target = adjust_probability(on_target,
-        ability_multiplier(finishing - 0.5, config.attribute_strength), 1)
+        ability_multiplier((finishing if heading is None else heading) - 0.5, config.attribute_strength), 1)
     goal_given_target = adjust_probability(goal_given_target,
         ability_multiplier(finishing - shot_stopping, config.attribute_strength), 1)
     on_target = adjust_probability(on_target, max(.01, 1-pressure_effect*pressure), 1)
@@ -174,11 +179,11 @@ class ShotResult:
 def resolve_shot(zone: Zone, rng: Random, config: ActionConfig, *, finishing: float = 0.5,
                  shot_stopping: float = 0.5, pressure: float = 0,
                  pressure_effect: float = .4, block_probability: float = 0,
-                 parry_probability: float = 0) -> ShotResult:
+                 parry_probability: float = 0, heading: float | None = None) -> ShotResult:
     """Resolve obstruction, accuracy, conversion, then held/parried saves."""
     on_target, goal_given_target = shot_probabilities(zone, config, finishing=finishing,
                                                      shot_stopping=shot_stopping, pressure=pressure,
-                                                     pressure_effect=pressure_effect)
+                                                     pressure_effect=pressure_effect, heading=heading)
     goal_probability = (1-block_probability)*on_target*goal_given_target
     target_probability = (1-block_probability)*on_target
     if block_probability > 0 and rng.random() < block_probability:
@@ -205,10 +210,12 @@ class PassResult:
 def resolve_pass(possession: "Possession", attacking: "Team | TeamInPlay", defending: "Team | TeamInPlay",
                  direction: Direction, rng: Random, config: ActionConfig, *,
                  pressure: float = 0, pressure_effect: float = .4,
-                 locations=None, pitch: Pitch | None = None) -> PassResult:
+                 locations=None, pitch: Pitch | None = None,
+                 directness: float = .5, width: float = .5) -> PassResult:
     """Choose an outfield receiver and nearby destination, then resolve the pass.
 
-    Forward destinations have weight 3; sideways and backward destinations weight 1.
+    Balanced forward destinations have weight 3; other destinations weight 1.
+    Direct instructions also permit a two-zone forward pass; width biases lanes.
     All legal choices remain inside the pitch. Assigned operating zones weight
     receivers and interceptors; these are not actual player coordinates.
     """
@@ -221,7 +228,15 @@ def resolve_pass(possession: "Possession", attacking: "Team | TeamInPlay", defen
         column, lane = origin.column + dx, origin.lane + dy
         if 0 <= column <= 2 and 0 <= lane <= 2:
             destinations.append(Zone(column, lane))
-            weights.append(3 if dx == int(direction) else 1)
+            weights.append(3*instruction_multiplier(directness) if dx == int(direction) else 1)
+    far_column = origin.column+2*int(direction)
+    if directness > .5 and 0 <= far_column <= 2:
+        destinations.append(Zone(far_column, origin.lane))
+        weights.append(6*(directness-.5))
+    if width != .5:
+        factor = instruction_multiplier(width)
+        weights = [weight*(factor if destination.lane != 1 else 1/factor)
+                   for destination, weight in zip(destinations, weights)]
     destination = rng.choices(destinations, weights=weights, k=1)[0]
     receiver = rng.choices(receivers, weights=[
         spatial_involvement(p, destination, direction, locations, pitch) for p in receivers
