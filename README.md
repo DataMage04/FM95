@@ -452,6 +452,32 @@ and response strength are not empirically identified by these aggregate targets.
 Bounded monotonic attribute responses have been checked, but that does not validate
 a final player-rating scale or realistic skill effects.
 
-Interfaces, persistence, competitions, transfers and broader club management are
-later work. The engine remains independent of a GUI or web application so those
-systems can consume the same state and event APIs.
+## Milestone 3: in-memory competitions and seasons
+
+Milestone 3 adds an in-memory home-and-away league season. It generates fixtures
+and matchdays for even or odd numbers of clubs, assigns a reproducible seed to
+each fixture, runs matches using the existing match engine, records full-time
+scores and statistics, and derives standings by points, goal difference, goals
+scored and team ID. Matchdays progress in order; a partially played day can be
+resumed, while completed results cannot be overwritten. The competition layer
+does not add persistence, transfers or a user interface.
+
+```python
+from fm95.demo import demo_team
+from fm95.season import Season
+
+clubs = [demo_team("north", "North"), demo_team("south", "South")]
+season = Season("2026/27", clubs, seed=95)
+for matchday in season.matchdays:
+    season.play_matchday(matchday)
+print(season.standings())
+```
+
+See [the Milestone 3 guide](docs/milestone3.md) for the API behavior and
+limitations. Persistence, transfers, broader club management and a GUI remain
+future work; the competition layer is in memory and reuses the engine's seeded
+pseudo-random behavior for repeatable fixture simulation.
+
+Run the full-season acceptance check with `python -m fm95.season_validation
+--clubs 4 --seed 95 --json`; its recorded output is in
+[docs/milestone3-validation.json](docs/milestone3-validation.json).
