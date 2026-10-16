@@ -24,8 +24,11 @@ choose **Save career** before exiting. Once saved, completed matchdays autosave.
 The load menu lists files under `saves/` and also accepts a file path. Squad
 operations include contracts and transfers during pre-season and the mid-season
 window, with cash flow from wages, sponsorship, ticket sales, and stadium costs;
-see the [Milestone 7](docs/milestone7.md) and [Milestone 8](docs/milestone8.md)
-guides.
+after each complete season, choose **Advance to next season** to progress player
+ages and abilities, handle retirements and expired contracts, and generate youth
+players. The league stays fixed. See the
+[Milestone 7](docs/milestone7.md), [Milestone 8](docs/milestone8.md), and
+[Milestone 9](docs/milestone9.md) guides.
 
 See [the CLI guide](docs/milestone6.md) for the full prototype workflow.
 

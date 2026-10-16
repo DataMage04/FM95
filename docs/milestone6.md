@@ -54,9 +54,9 @@ used.
   exposed in this prototype.
 - Match results show score and key statistics rather than a live animated
   match or event-by-event commentary.
-- Club finances and recurring wages, income, and costs are not implemented.
-- Transfers and basic contracts are available as described in
-  [Milestone 7](milestone7.md).
+- Transfers, contracts, finances, and season progression are available as
+  described in [Milestone 7](milestone7.md), [Milestone 8](milestone8.md), and
+  [Milestone 9](milestone9.md).
 
 ## Validation
 

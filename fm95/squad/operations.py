@@ -68,12 +68,16 @@ class SquadOperations:
     finance subsystem. Contracts carry the weekly wages charged each matchday.
     """
 
-    def __init__(self, clubs, *, contracts=None, budgets=None, history=()):
+    def __init__(self, clubs, *, contracts=None, budgets=None, history=(), season_number=1):
         clubs = tuple(clubs)
         club_ids = {club.id for club in clubs}
         player_clubs = {player.id: (club.id, player) for club in clubs for player in club.players}
+        if type(season_number) is not int or season_number < 1:
+            raise ValueError("Current season number must be positive.")
+        self.season_number = season_number
         self.contracts = dict({
-            player_id: Contract(player_id, club_id, 1, DEFAULT_CONTRACT_SEASONS,
+            player_id: Contract(player_id, club_id, season_number,
+                                season_number + DEFAULT_CONTRACT_SEASONS - 1,
                                 self._starting_wage(player))
             for player_id, (club_id, player) in player_clubs.items()
         } if contracts is None else contracts)
@@ -226,12 +230,16 @@ class SquadOperations:
         }
         self.replace_rosters(season, rosters)
         self.contracts.pop(player_id)
-        self.contracts[player_id] = Contract(player_id, buyer_id, 1, contract_seasons, weekly_wage)
+        self.contracts[player_id] = Contract(
+            player_id, buyer_id, self.season_number,
+            self.season_number + contract_seasons - 1, weekly_wage)
         self.budgets[buyer_id] -= fee
-        self.history.append(TransferRecord(1, completed, window, player.id, player.name,
+        self.history.append(TransferRecord(self.season_number, completed, window, player.id, player.name,
                                            seller_id, buyer_id, fee))
-        season.club_finances.record_transfer_fee(buyer_id, fee, matchday=completed)
-        season.club_finances.receive_transfer_fee(seller_id, fee, matchday=completed)
+        season.club_finances.record_transfer_fee(
+            buyer_id, fee, matchday=completed, season_number=self.season_number)
+        season.club_finances.receive_transfer_fee(
+            seller_id, fee, matchday=completed, season_number=self.season_number)
         self.validate(season.teams)
         return self.history[-1]
 
@@ -245,7 +253,9 @@ class SquadOperations:
             weekly_wage = contract.weekly_wage
         if type(weekly_wage) is not int or weekly_wage < 0:
             raise ValueError("Weekly wage must be a non-negative whole number.")
-        self.contracts[player_id] = Contract(player_id, contract.club_id, 1, seasons, weekly_wage)
+        self.contracts[player_id] = Contract(
+            player_id, contract.club_id, self.season_number,
+            self.season_number + seasons - 1, weekly_wage)
         self.validate(season.teams)
         return self.contracts[player_id]
 

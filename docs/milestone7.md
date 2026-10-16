@@ -27,9 +27,9 @@ must retain a goalkeeper and 10 outfield players so it can field a legal XI.
   is too small.
 - Existing players receive a basic three-season contract. New and renewed
   contracts can run for one to five seasons and include a weekly wage.
-- Save format version 4 also stores Milestone 8 finances. Earlier save versions
-  migrate with initial financial accounts; Milestone 7 transfer history is
-  applied to the new cash balances.
+- Contracts and transfers use career season numbers, so durations remain correct
+  as the world advances. Save format version 5 also stores world progression;
+  versions 1–4 migrate with default age and potential values.
 
 Run the complete test suite with:
 

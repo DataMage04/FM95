@@ -23,9 +23,10 @@ club. In the career menu, **10. Club finances** shows the account summary and
   the current balance. A negative balance blocks transfer fees the club cannot
   afford.
 
-Save format version 4 persists balances, account settings, financial
-transactions, processed matchdays, and contract wages. Earlier save formats are
-migrated; Milestone 7 transfer fees are carried into starting cash balances.
+Save format version 5 persists balances, account settings, financial
+transactions, season-aware processed matchdays, and contract wages. Earlier save
+formats are migrated; Milestone 7 transfer fees are carried into starting cash
+balances. See [Milestone 9](milestone9.md) for multi-season operation.
 
 The income model is prototype scale: attendance, wages, sponsorship, and stadium
 costs are simple deterministic rules, not calibrated real-world club accounts.

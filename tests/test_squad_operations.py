@@ -118,7 +118,7 @@ class SquadOperationsTests(unittest.TestCase):
             saved = json.loads(path.read_text(encoding="utf-8"))
             resumed = ManagerSession.load(path)
 
-        self.assertEqual(saved["version"], 4)
+        self.assertEqual(saved["version"], 5)
         self.assertEqual(resumed.squad_operations.history, self.session.squad_operations.history)
         self.assertEqual(resumed.squad_operations.budgets, self.session.squad_operations.budgets)
         self.assertEqual(resumed.squad_operations.contracts, self.session.squad_operations.contracts)
@@ -131,6 +131,7 @@ class SquadOperationsTests(unittest.TestCase):
             saved["version"] = 2
             saved.pop("squad")
             saved.pop("finances")
+            saved.pop("progression")
             path.write_text(json.dumps(saved), encoding="utf-8")
             resumed = ManagerSession.load(path)
 
@@ -147,6 +148,7 @@ class SquadOperationsTests(unittest.TestCase):
             saved = json.loads(path.read_text(encoding="utf-8"))
             saved["version"] = 3
             saved.pop("finances")
+            saved.pop("progression")
             for contract in saved["squad"]["contracts"]:
                 contract.pop("weekly_wage", None)
             path.write_text(json.dumps(saved), encoding="utf-8")

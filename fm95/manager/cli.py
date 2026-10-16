@@ -111,7 +111,9 @@ class ManagerCLI:
             self.output("9. Transfer history")
             self.output("10. Club finances")
             self.output("11. Finance history")
-            choice = self._ask_choice("Choose: ", {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"})
+            self.output("12. Advance to next season")
+            self.output("13. Season history")
+            choice = self._ask_choice("Choose: ", {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"})
             if choice == "1":
                 self._play_next_matchday()
             elif choice == "2":
@@ -132,6 +134,10 @@ class ManagerCLI:
                 self._show_finances()
             elif choice == "11":
                 self._show_finance_history()
+            elif choice == "12":
+                self._advance_season()
+            elif choice == "13":
+                self._show_season_history()
             else:
                 return
 
@@ -245,8 +251,9 @@ class ManagerCLI:
                                      minimum=0)
             record = self.session.make_transfer(player.id, fee=fee, contract_seasons=duration,
                                                 weekly_wage=wage)
+            end_season = operations.contracts[player.id].end_season
             self.output(f"Signed {record.player_name} from {targets[index - 1][0].name} "
-                        f"for {record.fee:,}; contract through season {duration} at {wage:,}/week.")
+                        f"for {record.fee:,}; contract through season {end_season} at {wage:,}/week.")
             self._autosave_squad_change()
         except (TypeError, ValueError) as exc:
             self.output(f"Transfer not completed: {exc}")
@@ -317,8 +324,38 @@ class ManagerCLI:
             self.output("No financial transactions have been posted.")
             return
         for entry in entries[-30:]:
-            self.output(f"MD {entry.matchday:>2}  {entry.category:<14} "
+            self.output(f"S{entry.season_number} MD {entry.matchday:>2}  {entry.category:<14} "
                         f"{entry.amount:>10,}  {entry.description}")
+
+    def _advance_season(self) -> None:
+        assert self.session is not None
+        try:
+            record = self.session.advance_season()
+        except ValueError as exc:
+            self.output(f"Cannot advance season: {exc}")
+            return
+        self.output(f"Season {record.season_number} complete. Champions: {record.champion_name}.")
+        self.output(f"Retired: {len(record.retired_players)}; contracts expired: "
+                    f"{len(record.released_players)}; youth generated: {len(record.generated_players)}.")
+        if self.session.save_path is not None:
+            self.output(f"Autosaved: {self.session.save_path}")
+        self.output(f"Season {self.session.season.season_number} is ready. Transfer window: Pre-season.")
+
+    def _show_season_history(self) -> None:
+        assert self.session is not None
+        self.output("\nSeason history")
+        if not self.session.season.season_history:
+            self.output("No completed seasons yet.")
+            return
+        for record in self.session.season.season_history:
+            self.output(f"Season {record.season_number}: {record.champion_name} champions; "
+                        f"{len(record.retired_players)} retired, "
+                        f"{len(record.released_players)} contracts expired, "
+                        f"{len(record.generated_players)} youth players generated.")
+            for position, (team_id, points, goal_difference, goals_for, played) in enumerate(
+                    record.table, 1):
+                self.output(f"  {position:>2}. {team_id:<16} {points:>3} pts  "
+                            f"GD {goal_difference:+4}  GF {goals_for:>3}  P {played:>2}")
 
     def _autosave_squad_change(self) -> None:
         assert self.session is not None

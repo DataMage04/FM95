@@ -125,11 +125,20 @@ def generate_team(team_id, name, *, seed, team_strength=.5, include_bench=True):
     players = []
     for index, position in enumerate(positions, 1):
         player_id = f"{team_id}-{index:02d}"
+        development_rng = Random(seed ^ (index * 0xF095))
+        attributes = generate_attributes(seed=seed, player_id=player_id,
+                                         position=position, team_strength=team_strength)
+        skill_names = [field.name for field in fields(Attributes)
+                       if field.name != "injury_proneness"]
+        potential = max(.4, min(1.0,
+            sum(getattr(attributes, name) for name in skill_names) / len(skill_names)
+            + development_rng.uniform(.05, .2)))
         players.append(Player(player_id, f"{name} Player {index:02d}",
                               is_goalkeeper=position == Position.GK,
                               position=position,
-                              attributes=generate_attributes(seed=seed, player_id=player_id,
-                                  position=position, team_strength=team_strength),
+                              attributes=attributes,
                               decisions=generate_decisions(seed=seed, player_id=player_id,
-                                  position=position)))
+                                  position=position),
+                              age=development_rng.randint(18, 34),
+                              potential=potential))
     return Team(team_id, name, tuple(players[:11]), tuple(players[11:]))

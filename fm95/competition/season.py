@@ -83,6 +83,8 @@ class Season:
         if len(set(roster_ids)) != len(roster_ids):
             raise ValueError("A player cannot appear in more than one season squad.")
         self.name = name
+        self.season_number = 1
+        self.season_history = []
         self.seed = seed
         self.teams = teams
         self.points_for_win = points_for_win
@@ -302,6 +304,13 @@ class Season:
 
     def validate(self) -> None:
         """Check schedule integrity and reconcile each stored result."""
+        if type(self.season_number) is not int or self.season_number < 1:
+            raise ValueError("Season number must be a positive integer.")
+        if len(self.season_history) != self.season_number - 1:
+            raise ValueError("Completed season history does not match current season number.")
+        if any(getattr(record, "season_number", None) != index
+               for index, record in enumerate(self.season_history, 1)):
+            raise ValueError("Season history contains an invalid season sequence.")
         if len(self._fixture_by_id) != len(self.fixtures):
             raise ValueError("Fixture IDs must be unique.")
         if len({fixture.seed for fixture in self.fixtures}) != len(self.fixtures):
@@ -376,8 +385,12 @@ class Season:
                             or sum(league_players[pid].is_goalkeeper for pid in lineup) != 1):
                         raise ValueError(f"Result for {fixture_id} has an invalid saved lineup.")
         if self.squad_operations is not None:
+            if self.squad_operations.season_number != self.season_number:
+                raise ValueError("Squad operations season does not match the current season.")
             self.squad_operations.validate(self.teams)
         if self.club_finances is not None:
+            if self.club_finances.current_season != self.season_number:
+                raise ValueError("Finance season does not match the current season.")
             self.club_finances.validate(self.teams, fixtures=self.fixtures, results=self.results,
                                         matchdays=self.matchdays)
 
@@ -386,7 +399,8 @@ class Season:
                  points_for_win: int, points_for_draw: int, points_for_loss: int,
                  fixtures: tuple[Fixture, ...], results: tuple[FixtureResult, ...],
                  run_settings: dict | None, manager_assignment: ManagerAssignment | None = None,
-                 squad_operations=None, club_finances=None) -> "Season":
+                 squad_operations=None, club_finances=None, season_number=1,
+                 season_history=()) -> "Season":
         """Rebuild validated persisted state without regenerating or losing results."""
         season = cls(name, teams, seed=seed, points_for_win=points_for_win,
                      points_for_draw=points_for_draw, points_for_loss=points_for_loss)
@@ -397,6 +411,8 @@ class Season:
             raise ValueError("Save contains duplicate fixture results.")
         season._run_settings = run_settings
         season.manager_assignment = manager_assignment
+        season.season_number = season_number
+        season.season_history = list(season_history)
         if squad_operations is not None:
             season.squad_operations = squad_operations
         if club_finances is not None:

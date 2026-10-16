@@ -42,7 +42,7 @@ from fm95.competition.manager import Manager, ManagerAssignment
 
 
 SAVE_FORMAT = "fm95-season"
-SAVE_VERSION = 4
+SAVE_VERSION = 5
 
 MATCH_OPTION_TYPES = {
     "action_config": ActionConfig,
@@ -110,16 +110,32 @@ def load_season(path: str | os.PathLike) -> Season:
     legacy_keys = {"format", "version", "season", "rules", "teams", "fixtures", "results", "settings"}
     version3_keys = legacy_keys | {"manager", "squad"}
     version4_keys = version3_keys | {"finances"}
+    version5_keys = version4_keys | {"progression"}
     if not isinstance(data, dict) or set(data) not in (
-            legacy_keys, legacy_keys | {"manager"}, version3_keys, version4_keys):
+            legacy_keys, legacy_keys | {"manager"}, version3_keys, version4_keys,
+            version5_keys):
         raise ValueError("Save keys are invalid.")
     if type(data.get("version")) is int and data["version"] >= 2 and "manager" not in data:
         raise ValueError("Version 2 season saves must contain a manager field.")
     if data["format"] != SAVE_FORMAT:
         raise ValueError("File is not an FM95 season save.")
-    if type(data["version"]) is not int or data["version"] not in (1, 2, 3, SAVE_VERSION):
+    if type(data["version"]) is not int or data["version"] not in (1, 2, 3, 4, SAVE_VERSION):
         raise ValueError(f"Unsupported season save version: {data['version']!r}.")
 
+    season_number = 1
+    season_history = ()
+    if data["version"] >= 5:
+        progression = _require_object(data["progression"],
+            {"season_number", "history"}, "world progression")
+        season_number = progression["season_number"]
+        if type(season_number) is not int or season_number < 1:
+            raise ValueError("Saved season number is invalid.")
+        season_history = tuple(_season_record_from_data(item)
+                              for item in _require_list(progression["history"], "season history"))
+        if len(season_history) != season_number - 1 or any(
+                record.season_number != index
+                for index, record in enumerate(season_history, 1)):
+            raise ValueError("Saved season history does not match the current season number.")
     season_data = _require_object(data["season"], {"name", "seed"}, "season")
     rules = _require_object(data["rules"], {"points_for_win", "points_for_draw", "points_for_loss"}, "rules")
     teams = tuple(_team_from_data(item) if data["version"] == 1 else _club_from_data(item)
@@ -132,8 +148,13 @@ def load_season(path: str | os.PathLike) -> Season:
     current_clubs = tuple(Club.from_team(team) if isinstance(team, Team) else team for team in teams)
     squad = (_squad_operations_from_data(data["squad"], current_clubs)
              if data["version"] >= 3 else SquadOperations(current_clubs))
-    if data["version"] >= 4:
-        finances = _club_finances_from_data(data["finances"], current_clubs)
+    squad.season_number = season_number
+    if data["version"] >= 5:
+        finances = _club_finances_from_data(data["finances"], current_clubs,
+                                             current_season=season_number)
+    elif data["version"] >= 4:
+        finances = _club_finances_from_data(data["finances"], current_clubs,
+                                             current_season=season_number)
     else:
         finances = ClubFinances(current_clubs)
         if data["version"] == 3:
@@ -147,6 +168,8 @@ def load_season(path: str | os.PathLike) -> Season:
                             if data.get("manager") is not None else None),
         squad_operations=squad,
         club_finances=finances,
+        season_number=season_number,
+        season_history=season_history,
     )
 
 
@@ -156,6 +179,10 @@ def _season_to_data(season: Season) -> dict[str, Any]:
         "format": SAVE_FORMAT,
         "version": SAVE_VERSION,
         "season": {"name": season.name, "seed": season.seed},
+        "progression": {
+            "season_number": season.season_number,
+            "history": [_season_record_to_data(record) for record in season.season_history],
+        },
         "rules": {
             "points_for_win": season.points_for_win,
             "points_for_draw": season.points_for_draw,
@@ -211,12 +238,16 @@ def _club_finances_to_data(finances: ClubFinances) -> dict[str, Any]:
         "accounts": [asdict(finances.accounts[club_id])
                      for club_id in sorted(finances.accounts)],
         "transactions": [asdict(entry) for entry in finances.transactions],
-        "processed_matchdays": sorted(finances.processed_matchdays),
+        "current_season": finances.current_season,
+        "processed_season_matchdays": [list(item) for item in sorted(finances.processed_season_matchdays)],
     }
 
 
-def _club_finances_from_data(data: Any, clubs: tuple[Club, ...]) -> ClubFinances:
-    item = _require_object(data, {"accounts", "transactions", "processed_matchdays"}, "club finances")
+def _club_finances_from_data(data: Any, clubs: tuple[Club, ...], *, current_season=1) -> ClubFinances:
+    legacy_keys = {"accounts", "transactions", "processed_matchdays"}
+    current_keys = {"accounts", "transactions", "current_season", "processed_season_matchdays"}
+    item = _require_object(data, current_keys if "current_season" in data else legacy_keys,
+                           "club finances")
     accounts = {}
     for raw in _require_list(item["accounts"], "club accounts"):
         account_data = _require_object(raw,
@@ -228,16 +259,66 @@ def _club_finances_from_data(data: Any, clubs: tuple[Club, ...]) -> ClubFinances
         accounts[account.club_id] = account
     transactions = []
     for raw in _require_list(item["transactions"], "finance transactions"):
-        transaction_data = _require_object(raw,
-            {"matchday", "club_id", "category", "description", "amount"}, "finance transaction")
+        transaction_keys = {"matchday", "club_id", "category", "description", "amount"}
+        transaction_data = _require_object(raw, transaction_keys | ({"season_number"}
+            if "season_number" in raw else set()), "finance transaction")
         transactions.append(FinanceTransaction(**transaction_data))
+    if "current_season" in item:
+        if type(item["current_season"]) is not int or item["current_season"] != current_season:
+            raise ValueError("Finance current season does not match world progression.")
+        processed = _require_list(item["processed_season_matchdays"], "processed finance season matchdays")
+        parsed = []
+        for pair in processed:
+            if not isinstance(pair, list) or len(pair) != 2 or any(type(value) is not int or value < 1 for value in pair):
+                raise ValueError("Saved processed finance season matchdays are invalid.")
+            parsed.append(tuple(pair))
+        if len(parsed) != len(set(parsed)):
+            raise ValueError("Save contains duplicate processed finance season matchdays.")
+        return ClubFinances(clubs, accounts=accounts, transactions=transactions,
+                            processed_season_matchdays=parsed,
+                            current_season=current_season)
     processed = _require_list(item["processed_matchdays"], "processed finance matchdays")
     if any(type(day) is not int or day < 1 for day in processed):
         raise ValueError("Saved processed finance matchdays are invalid.")
     if len(processed) != len(set(processed)):
         raise ValueError("Save contains duplicate processed finance matchdays.")
     return ClubFinances(clubs, accounts=accounts, transactions=transactions,
-                        processed_matchdays=processed)
+                        processed_matchdays=processed, current_season=current_season)
+
+
+def _season_record_to_data(record):
+    return {
+        "season_number": record.season_number,
+        "season_name": record.season_name,
+        "champion_id": record.champion_id,
+        "champion_name": record.champion_name,
+        "table": [list(row) for row in record.table],
+        "retired_players": list(record.retired_players),
+        "released_players": list(record.released_players),
+        "generated_players": list(record.generated_players),
+    }
+
+
+def _season_record_from_data(data):
+    from fm95.world.progression import SeasonRecord
+    keys = {"season_number", "season_name", "champion_id", "champion_name", "table",
+            "retired_players", "released_players", "generated_players"}
+    item = _require_object(data, keys, "season history record")
+    table = []
+    for row in _require_list(item["table"], "season history table"):
+        if not isinstance(row, list) or len(row) != 5:
+            raise ValueError("Season history table row is invalid.")
+        team_id, points, goal_difference, goals_for, played = row
+        if (not isinstance(team_id, str) or any(type(value) is not int for value in
+                (points, goal_difference, goals_for, played))):
+            raise ValueError("Season history table values are invalid.")
+        table.append(tuple(row))
+    for key in ("retired_players", "released_players", "generated_players"):
+        if any(not isinstance(value, str) for value in _require_list(item[key], key)):
+            raise ValueError(f"Season history {key} values are invalid.")
+    return SeasonRecord(item["season_number"], item["season_name"], item["champion_id"],
+                        item["champion_name"], tuple(table), tuple(item["retired_players"]),
+                        tuple(item["released_players"]), tuple(item["generated_players"]))
 
 
 def _club_to_data(club: Club) -> dict[str, Any]:
@@ -301,6 +382,8 @@ def _player_to_data(player: Player) -> dict[str, Any]:
         "attributes": asdict(player.attributes),
         "position": player.position.value,
         "decisions": asdict(player.decisions),
+        "age": player.age,
+        "potential": player.potential,
     }
 
 
@@ -316,7 +399,8 @@ def _team_from_data(data: Any) -> Team:
 def _player_from_data(data: Any) -> Player:
     from fm95.match.spatial.positions import Position
 
-    item = _require_object(data, {"id", "name", "is_goalkeeper", "attributes", "position", "decisions"}, "player")
+    base_keys = {"id", "name", "is_goalkeeper", "attributes", "position", "decisions"}
+    item = _require_object(data, base_keys | ({"age", "potential"} if "age" in data or "potential" in data else set()), "player")
     attributes = _require_object(item["attributes"], {field.name for field in fields(Attributes)}, "player attributes")
     decisions = _require_object(item["decisions"], {field.name for field in fields(DecisionTendencies)}, "player decisions")
     if type(item["is_goalkeeper"]) is not bool:
@@ -328,6 +412,7 @@ def _player_from_data(data: Any) -> Player:
     return Player(
         id=item["id"], name=item["name"], is_goalkeeper=item["is_goalkeeper"],
         attributes=Attributes(**attributes), decisions=DecisionTendencies(**decisions), position=position,
+        age=item.get("age", 25), potential=item.get("potential", .7),
     )
 
 

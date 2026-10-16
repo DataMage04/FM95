@@ -123,7 +123,8 @@ class ManagerSession:
         )
 
     def play_next_matchday(self, *, selection: SquadSelection | None = None,
-                           tactics: TeamTactics | None = None) -> tuple[FixtureResult, ...]:
+                           tactics: TeamTactics | None = None,
+                           match_options=None) -> tuple[FixtureResult, ...]:
         matchday = self.next_matchday
         if matchday is None:
             return ()
@@ -135,11 +136,21 @@ class ManagerSession:
             raise ValueError("Tactics must be a TeamTactics instance.")
         tactic_map = ({self.manager_team_id: tactics} if tactics is not None else None)
         results = self.season.play_matchday(matchday, manager_selection=selection,
-                                            tactics=tactic_map)
+                                            tactics=tactic_map, match_options=match_options)
         if all(self.season.result_for(fixture.id) is not None
                for fixture in self.season.fixtures_for_matchday(matchday)):
             self.finances.process_matchday(self.season, self.squad_operations, matchday)
         return results
+
+    def advance_season(self):
+        """Finish the current league year and prepare the next one."""
+        if not self.season.complete:
+            raise ValueError("Finish every fixture before advancing the season.")
+        from fm95.world.progression import advance_season
+        record = advance_season(self.season)
+        if self.save_path is not None:
+            self.save()
+        return record
 
     def save(self, path: str | Path | None = None) -> Path:
         target = Path(path) if path is not None else self.save_path
