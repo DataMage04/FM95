@@ -69,7 +69,8 @@ def signature(match):
     return hashlib.sha256(json.dumps(payload,sort_keys=True,default=str).encode()).hexdigest()
 
 
-def scenario(seed,index):
+def scenario(seed,index,profile=None):
+    from fm95.calibration import profile_configs
     styles=('balanced','pressing','possession','direct')
     home_attributes=Attributes(passing=.8 if index%2==0 else .2,stamina=.3) if index>=4 else Attributes()
     away_attributes=Attributes(passing=.2 if index%2==0 else .8,stamina=.9) if index>=4 else Attributes()
@@ -78,7 +79,8 @@ def scenario(seed,index):
         home_tactics=preset(styles[index%4]),away_tactics=preset(styles[(index+1)%4]),
         injury_config=InjuryConfig(enabled=True,temporary_probability=.5),
         auto_substitution_config=AutoSubstitutionConfig(enabled=True),added_time_config=AddedTimeConfig(enabled=True),
-        woodwork_config=WoodworkConfig(enabled=True),offside_config=OffsideConfig(screening_enabled=True))
+        woodwork_config=WoodworkConfig(enabled=True),offside_config=OffsideConfig(screening_enabled=True),
+        **profile_configs(profile or {}))
     originals=match.home,match.away
     match.set_player_duty('home','home-9',Duty.ATTACK)
     match.set_player_duty('home','home-7',Duty.SUPPORT)
@@ -111,12 +113,12 @@ def scenario(seed,index):
     return match,checks
 
 
-def run_validation(matches=8,seed=95):
+def run_validation(matches=8,seed=95,profile=None):
     if type(matches) is not int or matches<1 or type(seed) is not int:raise ValueError('Positive match count and integer seed required.')
     rows=[]
     for index in range(matches):
-        first,checks=scenario(seed+index,index)
-        second,replay_checks=scenario(seed+index,index)
+        first,checks=scenario(seed+index,index,profile)
+        second,replay_checks=scenario(seed+index,index,profile)
         digest=signature(first)
         require(digest==signature(second),'Replay divergence')
         rows.append({'seed':seed+index,'attribute_range_stress':index>=4,'phase':first.phase.value,'elapsed_seconds':first.elapsed_seconds,
@@ -125,7 +127,7 @@ def run_validation(matches=8,seed=95):
                      'treatment_returns':sum(first.statistics(t.id).treatment_returns for t in (first.home,first.away)),
                      'woodwork_contacts':sum(first.statistics(t.id).woodwork_contacts for t in (first.home,first.away))})
     return {'passed':True,'purpose':'consistency and determinism; no calibration',
-            'scenarios':matches,'simulations':2*matches,'base_seed':seed,
+            'scenarios':matches,'simulations':2*matches,'base_seed':seed,'parameters':profile or {},
             'features':{'added_time':True,'woodwork':True,'temporary_treatment':True,'off_ball_screening':True,'automatic_substitutions':True},
             'completed':sum(r['phase']=='full_time' for r in rows),'abandoned':sum(r['phase']=='abandoned' for r in rows),
             'state_checks':sum(r['state_checks'] for r in rows),'results':rows}
@@ -134,8 +136,10 @@ def run_validation(matches=8,seed=95):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--matches',type=int,default=8);parser.add_argument('--seed',type=int,default=95)
+    parser.add_argument('--profile',choices=('prototype','pl2015'),default='prototype')
     parser.add_argument('--json',action='store_true');args=parser.parse_args()
-    result=run_validation(args.matches,args.seed)
+    from fm95.calibration import load_profile
+    result=run_validation(args.matches,args.seed,load_profile() if args.profile=='pl2015' else None)
     print(json.dumps(result,indent=2) if args.json else f"Passed {result['simulations']} simulations and {result['state_checks']} state checks.")
 
 if __name__=='__main__':main()

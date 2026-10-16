@@ -1,0 +1,134 @@
+{
+  "passed": true,
+  "purpose": "consistency and determinism; no calibration",
+  "scenarios": 8,
+  "simulations": 16,
+  "base_seed": 5000,
+  "parameters": {
+    "actions": {
+      "interval_seconds": 4,
+      "completion_probability": 0.93,
+      "shot_probability": 0.038,
+      "on_target_probability": 0.56,
+      "goal_given_on_target_probability": 0.26,
+      "foul_probability": 0.08,
+      "yellow_card_probability": 0.132,
+      "straight_red_probability": 0.001,
+      "penalty_area_foul_multiplier": 0.075,
+      "booked_foul_multiplier": 0.35
+    },
+    "crossing": {
+      "choice_probability": 0.25
+    },
+    "boundaries": {
+      "failed_pass_out_probability": 0.38
+    },
+    "shots": {
+      "block_probability": 0.68
+    },
+    "set_pieces": {
+      "penalty_on_target_probability": 0.95,
+      "penalty_goal_given_on_target_probability": 0.93
+    }
+  },
+  "features": {
+    "added_time": true,
+    "woodwork": true,
+    "temporary_treatment": true,
+    "off_ball_screening": true,
+    "automatic_substitutions": true
+  },
+  "completed": 8,
+  "abandoned": 0,
+  "state_checks": 90720,
+  "results": [
+    {
+      "seed": 5000,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5760,
+      "state_checks": 11522,
+      "replay_sha256": "5bd051681493c981a1ce7ccd06ec4dec0ec3d6e542a5fd31dd985634f22ef74b",
+      "temporary_treatments": 2,
+      "treatment_returns": 2,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 5001,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5770,
+      "state_checks": 11542,
+      "replay_sha256": "d554771f1ca41b0d03088946593b79fd28220f9906c7f732283766e3bd00c82c",
+      "temporary_treatments": 1,
+      "treatment_returns": 1,
+      "woodwork_contacts": 1
+    },
+    {
+      "seed": 5002,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5720,
+      "state_checks": 11442,
+      "replay_sha256": "d06adb4942c9beabf461be8df1ac87bc2b8fc259aebb5c49c2014ea833a1f1ae",
+      "temporary_treatments": 2,
+      "treatment_returns": 2,
+      "woodwork_contacts": 1
+    },
+    {
+      "seed": 5003,
+      "attribute_range_stress": false,
+      "phase": "full_time",
+      "elapsed_seconds": 5645,
+      "state_checks": 11292,
+      "replay_sha256": "fb96225d9a9b3fb3394affe6ee0b58911f2448fc7257209134ca0f531e6058d3",
+      "temporary_treatments": 2,
+      "treatment_returns": 2,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 5004,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5757,
+      "state_checks": 11516,
+      "replay_sha256": "c6324465380cfb5c5eb526d07cf306cc00371bfd5fc2bf42cae7c0eea142560f",
+      "temporary_treatments": 3,
+      "treatment_returns": 3,
+      "woodwork_contacts": 1
+    },
+    {
+      "seed": 5005,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5540,
+      "state_checks": 11082,
+      "replay_sha256": "d51aedce27bf37c970df138f2ee04950ec938fc6b20877faa056a149318643be",
+      "temporary_treatments": 1,
+      "treatment_returns": 1,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 5006,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5580,
+      "state_checks": 11162,
+      "replay_sha256": "2a696d43f0a82c039d8b848006a093a7968ec3f94187278c39ce8c886a8b743b",
+      "temporary_treatments": 2,
+      "treatment_returns": 2,
+      "woodwork_contacts": 0
+    },
+    {
+      "seed": 5007,
+      "attribute_range_stress": true,
+      "phase": "full_time",
+      "elapsed_seconds": 5580,
+      "state_checks": 11162,
+      "replay_sha256": "7f3edab5d0ea78f4c0c0e9cda71540731e6bb0d7aa5bd1784f72b4ee5b3542f9",
+      "temporary_treatments": 1,
+      "treatment_returns": 1,
+      "woodwork_contacts": 0
+    }
+  ]
+}

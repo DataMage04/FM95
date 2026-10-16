@@ -26,6 +26,8 @@ class ActionConfig:
     foul_probability: float = 0.08
     straight_red_probability: float = 0.01
     yellow_card_probability: float = 0.20
+    penalty_area_foul_multiplier: float = 1.0
+    booked_foul_multiplier: float = 1.0
 
     def __post_init__(self):
         if type(self.interval_seconds) is not int or self.interval_seconds < 1:
@@ -33,7 +35,8 @@ class ActionConfig:
         for name in ("completion_probability", "shot_probability",
                      "on_target_probability", "goal_given_on_target_probability", "context_strength",
                      "attribute_strength", "dribble_probability", "dribble_success_probability",
-                     "foul_probability", "straight_red_probability", "yellow_card_probability"):
+                     "foul_probability", "straight_red_probability", "yellow_card_probability",
+                     "penalty_area_foul_multiplier", "booked_foul_multiplier"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must be between 0 and 1.")
 
@@ -141,7 +144,7 @@ class DribbleResult:
 
 def resolve_dribble(possession: "Possession", attacking: "Team | TeamInPlay", defending: "Team | TeamInPlay",
                     direction: Direction, rng: Random, config: ActionConfig, *,
-                    locations=None, pitch: Pitch | None = None) -> DribbleResult:
+                    locations=None, pitch: Pitch | None = None, booked_ids=()) -> DribbleResult:
     """A direct contest: win advances the carrier; loss leaves ball at the challenge zone."""
     carrier = next(p for p in attacking.lineup if p.id == possession.player_id)
     defenders = [p for p in defending.lineup if not p.is_goalkeeper]
@@ -161,7 +164,8 @@ def resolve_dribble(possession: "Possession", attacking: "Team | TeamInPlay", de
                                   for lane in (origin.lane - 1, origin.lane + 1) if 0 <= lane <= 2])
     probability = dribble_success_chance(carrier.attributes.dribbling,
                                          defender.attributes.tackling, config)
-    if config.foul_probability > 0 and rng.random() < config.foul_probability:
+    foul_probability = config.foul_probability * (config.booked_foul_multiplier if defender.id in booked_ids else 1)
+    if foul_probability > 0 and rng.random() < foul_probability:
         return DribbleResult(defender.id, origin, False, probability,
                              defender.attributes.tackling, fouled=True)
     return DribbleResult(defender.id, destination, rng.random() < probability,

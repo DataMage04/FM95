@@ -2,7 +2,8 @@
 
 A Python football manager built from the match engine outward. **Milestone 1 is
 still in progress:** the engine now runs reproducible spatial match prototypes,
-but its football behavior and attribute effects are not yet calibrated.
+with a first real-data aggregate calibration profile. Attribute effects and several
+other systems still need empirical calibration.
 
 Python 3.10 or newer; no external runtime dependencies.
 
@@ -18,7 +19,7 @@ python -m fm95.validation --matches 8 --seed 95 --json
 The demo uses synthetic equal-ability teams, different tactical instructions,
 automatic substitutions, and opt-in injury generation. It prints sample actions,
 shots, restarts, substitutions, and statistics. The current regression suite has
-**314 tests**.
+**319 tests**.
 
 A batch defaults to balanced tactics with automatic management and random injuries
 disabled. Enable those features explicitly:
@@ -329,11 +330,63 @@ instructions, feature configurations, scoreline frequencies, and mean statistics
 The same seed reproduces results for the same inputs, engine version and runtime;
 changing instructions or features can change all subsequent random draws.
 
+## Real-data calibration (first pass)
+
+`--profile pl2015` selects an opt-in aggregate research profile fitted to
+**StatsBomb Open Data, Premier League 2015/16**. The first 280 chronological matches
+were used for fitting; the final 100 were held out. Eight sequential training
+trials are recorded. The frozen profile and prototype were then each evaluated
+on 100 independent simulation seeds (9000–9099).
+
+```sh
+python -m fm95.batch --profile pl2015 --matches 20 --seed 95 --json
+python -m fm95.calibration --matches 100 --seed 9000 > fitted.json
+python -m fm95.validation --profile pl2015 --matches 8 --seed 5000 --json
+```
+
+The profile enables added time, woodwork and automatic substitutions, matching
+its fitting setup. Other feature/isolation flags still work. Defaults remain
+available with `--profile prototype`. Python callers can pass
+`**profile_configs(load_profile())` from `fm95.calibration` into `Match`, alongside
+those three feature configurations.
+
+| Totals per match | Real holdout | Prototype | Fitted profile |
+| --- | ---: | ---: | ---: |
+| Goals | 2.90 | 3.73 | 3.28 |
+| Shots | 26.57 | 31.56 | 25.77 |
+| Shots on target | 8.67 | 9.05 | 8.92 |
+| Ordinary passes | 941.10 | 600.71 | 941.87 |
+| Fouls | 24.97 | 18.78 | 23.69 |
+| Yellow cards | 3.01 | 3.86 | 3.12 |
+| Red cards | 0.17 | 0.50 | 0.07 |
+| Corners taken | 11.11 | 7.77 | 10.64 |
+| Penalties taken | 0.28 | 2.01 | 0.30 |
+
+Ordinary passes exclude cross-tagged source passes to match the engine's separate
+cross counters. Foul generation now supports area and booked-player caution
+multipliers; actual offence and sanction rules remain intact. These are fitted
+model coefficients, not measured causal behaviour.
+
+See [the full calibration report](docs/calibration.md),
+[validation measurements and uncertainty](docs/calibration-report.json),
+[training trials](docs/calibration-training.json), and
+[pinned source targets/hash manifest](data/calibration/targets.json).
+Data attribution: **StatsBomb**, [Open Data](https://github.com/hudl/open-data).
+
+![StatsBomb](https://raw.githubusercontent.com/hudl/open-data/master/img/SB%20-%20Icon%20Lockup%20-%20Colour%20positive.png)
+
+This first pass improves aggregate rates but is incomplete: goals remain high,
+fouls and reds miss the descriptive combined uncertainty bands, and penalty
+conversion remains noisy. The held-out data was not used for further tuning.
+The source terms support research/analysis; this preset does not grant commercial
+data rights. Raw events stay in the ignored local cache.
+
 ## Remaining Milestone 1 work
 
 The requested goal-handling, represented rules, treatment/off-ball interactions
-and integrated validation stages are implemented. The next stage is calibration
-preparation, followed by calibration and attribute-range refinement.
+and integrated validation stages are implemented. The first aggregate calibration
+pass is available; remaining work includes further goal/discipline validation on
+fresh data, contextual shot quality, and attribute-range/effect refinement.
 
 The integrated runner checks state invariants each tick, statistical reconciliation,
 immutable squad data and exact seeded replay. It combines tactical changes,
@@ -354,10 +407,12 @@ Known simplifications still include:
 - No complete tactical decision system, home-advantage model, or demonstrated
   aggregate football realism.
 
-**Calibration is deliberately reserved for the end of Milestone 1**, after the
-intended features are in place. That includes probability constants, tactical and
-fatigue effects, injury rates, attribute ranges/distributions, and aggregate match
-realism. Current batches verify behavior and consistency rather than tune averages.
+**Milestone 1 calibration is still in progress.** The aggregate research profile
+fits action pace, passing, shots, foul/card and penalty rates. Tactical and fatigue
+effects, injury rates, added-time durations, player attribute ranges/distributions
+and response strength are not empirically identified by these aggregate targets.
+Bounded monotonic attribute responses have been checked, but that does not validate
+a final player-rating scale or realistic skill effects.
 
 Interfaces, persistence, competitions, transfers and broader club management are
 later work. The engine remains independent of a GUI or web application so those

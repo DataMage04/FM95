@@ -1,0 +1,45 @@
+{
+  "name": "pl2015",
+  "version": 1,
+  "status": "aggregate research calibration; incomplete",
+  "source": "StatsBomb Open Data, Premier League 2015/2016",
+  "training_matches": 280,
+  "training_seed": 1000,
+  "validation_seed": 9000,
+  "parameters": {
+    "actions": {
+      "interval_seconds": 4,
+      "completion_probability": 0.93,
+      "shot_probability": 0.038,
+      "on_target_probability": 0.56,
+      "goal_given_on_target_probability": 0.26,
+      "foul_probability": 0.08,
+      "yellow_card_probability": 0.132,
+      "straight_red_probability": 0.001,
+      "penalty_area_foul_multiplier": 0.075,
+      "booked_foul_multiplier": 0.35
+    },
+    "crossing": {
+      "choice_probability": 0.25
+    },
+    "boundaries": {
+      "failed_pass_out_probability": 0.38
+    },
+    "shots": {
+      "block_probability": 0.68
+    },
+    "set_pieces": {
+      "penalty_on_target_probability": 0.95,
+      "penalty_goal_given_on_target_probability": 0.93
+    }
+  },
+  "unfitted": [
+    "attribute response strength and distributions",
+    "fatigue and stamina",
+    "injury and treatment rates",
+    "tactical effects",
+    "home advantage",
+    "added-time duration",
+    "player/team strength distributions"
+  ]
+}

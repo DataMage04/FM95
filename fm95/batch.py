@@ -2,7 +2,7 @@
 
 import argparse
 from collections import Counter
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 from typing import Callable
 
@@ -163,7 +163,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matches", type=int, default=200)
     parser.add_argument("--seed", type=int, default=95)
-    parser.add_argument("--context-strength", type=float, default=1.0,
+    parser.add_argument("--profile", choices=("prototype", "pl2015"), default="prototype",
+                        help="Use the locally fitted StatsBomb PL 2015/16 aggregate research profile")
+    parser.add_argument("--context-strength", type=float, default=None,
                         help="Situational effects from 0 (neutral) to 1 (default)")
     parser.add_argument("--json", action="store_true", help="Print machine-readable summary")
     parser.add_argument("--no-attacking-movement", action="store_true", help="Use static attacking shape targets")
@@ -191,25 +193,32 @@ def main():
     args = parser.parse_args()
     if args.matches < 1:
         parser.error("--matches must be positive")
-    if not 0 <= args.context_strength <= 1:
+    if args.context_strength is not None and not 0 <= args.context_strength <= 1:
         parser.error("--context-strength must be between 0 and 1")
-    summary = run_batch(args.matches, args.seed, ActionConfig(context_strength=args.context_strength),
-                        DefenseConfig(enabled=not args.no_defense, cover_enabled=not args.no_defensive_cover),
+    from fm95.calibration import load_profile, profile_configs
+    fitted = args.profile == "pl2015"
+    base = profile_configs(load_profile() if fitted else {})
+    actions = base["action_config"]
+    if args.context_strength is not None:
+        actions = replace(actions, context_strength=args.context_strength)
+    summary = run_batch(args.matches, args.seed, actions,
+                        replace(base["defense_config"], enabled=not args.no_defense, cover_enabled=not args.no_defensive_cover),
                         RecoveryConfig(enabled=not args.no_loose_balls),
-                        ShotConfig(enabled=not args.no_shot_interactions),
-                        OutOfPlayConfig(enabled=not args.no_out_of_play),
-                        CrossConfig(enabled=not args.no_crossing),
+                        replace(base["shot_config"], enabled=not args.no_shot_interactions),
+                        replace(base["out_config"], enabled=not args.no_out_of_play),
+                        replace(base["cross_config"], enabled=not args.no_crossing),
                         KeeperCrossConfig(enabled=not args.no_keeper_crosses),
                         ThroughBallConfig(enabled=not args.no_through_balls),
                         OffsideConfig(enabled=not args.no_offside,screening_enabled=args.off_ball_offside),
-                        SetPieceConfig(enabled=not args.no_set_pieces),
+                        replace(base["set_piece_config"], enabled=not args.no_set_pieces),
                         fatigue_config=FatigueConfig(enabled=not args.no_fatigue),
-                        auto_substitution_config=AutoSubstitutionConfig(enabled=args.auto_substitutions),
+                        auto_substitution_config=AutoSubstitutionConfig(enabled=args.auto_substitutions or fitted),
                         injury_config=InjuryConfig(enabled=args.injuries or args.temporary_injuries,temporary_probability=.5 if args.temporary_injuries else 0),
                         home_tactics=preset(args.home_style), away_tactics=preset(args.away_style),
                         attack_config=AttackConfig(enabled=not args.no_attacking_movement),
                         transition_config=TransitionConfig(enabled=not args.no_transitions),
-                        added_time_config=AddedTimeConfig(enabled=args.added_time),woodwork_config=WoodworkConfig(enabled=args.woodwork))
+                        added_time_config=AddedTimeConfig(enabled=args.added_time or fitted),woodwork_config=WoodworkConfig(enabled=args.woodwork or fitted))
+    summary["calibration_profile"] = args.profile
     if args.json:
         print(json.dumps(summary, indent=2))
         return
@@ -242,7 +251,8 @@ def main():
               f"automatic substitutions={stats['automatic_substitutions']:.2f}, "
               f"injuries={stats['injuries']:.2f}")
     print(f"Averages and scorelines cover {summary['completed_matches']} completed matches.")
-    print("Synthetic baseline; probabilities are uncalibrated. Use --json for all metrics.")
+    print("Synthetic teams; aggregate research calibration only." if fitted else
+          "Synthetic baseline; probabilities are uncalibrated. Use --json for all metrics.")
 
 
 if __name__ == "__main__":

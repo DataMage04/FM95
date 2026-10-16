@@ -1,0 +1,1100 @@
+{
+  "method": "sequential manual moment matching; training metrics only; shared seed prefixes; unequal trial sizes",
+  "selected_trial": 8,
+  "trials": [
+    {
+      "matches": 16,
+      "seed": 1000,
+      "parameters": {
+        "actions": {
+          "interval_seconds": 4,
+          "completion_probability": 0.95,
+          "shot_probability": 0.075,
+          "on_target_probability": 0.48,
+          "goal_given_on_target_probability": 0.23,
+          "foul_probability": 0.07,
+          "yellow_card_probability": 0.16,
+          "straight_red_probability": 0.001,
+          "penalty_area_foul_multiplier": 0.15
+        },
+        "crossing": {
+          "choice_probability": 0.15
+        }
+      },
+      "metrics": {
+        "goals": {
+          "mean": 3.25,
+          "se": 0.40311288741492746,
+          "ci95": [
+            2.459898740666742,
+            4.040101259333258
+          ]
+        },
+        "shots": {
+          "mean": 36.4375,
+          "se": 1.0040283445534128,
+          "ci95": [
+            34.46960444467531,
+            38.40539555532469
+          ]
+        },
+        "shots_on_target": {
+          "mean": 11.5625,
+          "se": 0.9127282819474077,
+          "ci95": [
+            9.773552567383081,
+            13.351447432616919
+          ]
+        },
+        "passes_attempted": {
+          "mean": 952.9375,
+          "se": 4.845503714785492,
+          "ci95": [
+            943.4403127190204,
+            962.4346872809796
+          ]
+        },
+        "passes_completed": {
+          "mean": 772.875,
+          "se": 5.503691942687199,
+          "ci95": [
+            762.0877637923331,
+            783.6622362076669
+          ]
+        },
+        "fouls_committed": {
+          "mean": 22.4375,
+          "se": 1.306932636621592,
+          "ci95": [
+            19.87591203222168,
+            24.99908796777832
+          ]
+        },
+        "yellow_cards": {
+          "mean": 3.5625,
+          "se": 0.4375,
+          "ci95": [
+            2.705,
+            4.42
+          ]
+        },
+        "red_cards": {
+          "mean": 0.3125,
+          "se": 0.11967838846954226,
+          "ci95": [
+            0.07793035859969716,
+            0.5470696414003029
+          ]
+        },
+        "corners_taken": {
+          "mean": 5.0625,
+          "se": 0.4870724620971025,
+          "ci95": [
+            4.107837974289679,
+            6.017162025710321
+          ]
+        },
+        "penalties_taken": {
+          "mean": 0.3125,
+          "se": 0.1505199322349037,
+          "ci95": [
+            0.017480932819588735,
+            0.6075190671804113
+          ]
+        },
+        "penalties_scored": {
+          "mean": 0.1875,
+          "se": 0.10077822185373186,
+          "ci95": [
+            0,
+            0.3850253148333145
+          ]
+        },
+        "woodwork_contacts": {
+          "mean": 0.625,
+          "se": 0.20155644370746373,
+          "ci95": [
+            0.2299493703333711,
+            1.020050629666629
+          ]
+        },
+        "shots_blocked": {
+          "mean": 8.9375,
+          "se": 0.6859831752067005,
+          "ci95": [
+            7.592972976594867,
+            10.282027023405133
+          ]
+        },
+        "pass_completion": 0.8110447956975143
+      },
+      "trial": 1,
+      "training_loss": 0.3336124623564576
+    },
+    {
+      "matches": 16,
+      "seed": 1000,
+      "parameters": {
+        "actions": {
+          "interval_seconds": 4,
+          "completion_probability": 0.95,
+          "shot_probability": 0.045,
+          "on_target_probability": 0.5,
+          "goal_given_on_target_probability": 0.21,
+          "foul_probability": 0.07,
+          "yellow_card_probability": 0.16,
+          "straight_red_probability": 0.001,
+          "penalty_area_foul_multiplier": 0.15
+        },
+        "crossing": {
+          "choice_probability": 0.25
+        },
+        "boundaries": {
+          "failed_pass_out_probability": 0.5
+        }
+      },
+      "metrics": {
+        "goals": {
+          "mean": 2.6875,
+          "se": 0.42542870534712784,
+          "ci95": [
+            1.8536597375196293,
+            3.5213402624803707
+          ]
+        },
+        "shots": {
+          "mean": 28.125,
+          "se": 1.2776117041834998,
+          "ci95": [
+            25.62088105980034,
+            30.62911894019966
+          ]
+        },
+        "shots_on_target": {
+          "mean": 9.75,
+          "se": 0.8190441583537077,
+          "ci95": [
+            8.144673449626733,
+            11.355326550373267
+          ]
+        },
+        "passes_attempted": {
+          "mean": 944.6875,
+          "se": 5.738552917185075,
+          "ci95": [
+            933.4399362823173,
+            955.9350637176827
+          ]
+        },
+        "passes_completed": {
+          "mean": 773,
+          "se": 5.222547271207796,
+          "ci95": [
+            762.7638073484327,
+            783.2361926515673
+          ]
+        },
+        "fouls_committed": {
+          "mean": 21.875,
+          "se": 1.139718532504115,
+          "ci95": [
+            19.641151676291933,
+            24.108848323708067
+          ]
+        },
+        "yellow_cards": {
+          "mean": 4,
+          "se": 0.43779751788545657,
+          "ci95": [
+            3.141916864944505,
+            4.8580831350554945
+          ]
+        },
+        "red_cards": {
+          "mean": 0.25,
+          "se": 0.11180339887498948,
+          "ci95": [
+            0.03086533820502063,
+            0.46913466179497937
+          ]
+        },
+        "corners_taken": {
+          "mean": 12.25,
+          "se": 0.9508767883730608,
+          "ci95": [
+            10.3862814947888,
+            14.1137185052112
+          ]
+        },
+        "penalties_taken": {
+          "mean": 0.25,
+          "se": 0.11180339887498948,
+          "ci95": [
+            0.03086533820502063,
+            0.46913466179497937
+          ]
+        },
+        "penalties_scored": {
+          "mean": 0.1875,
+          "se": 0.10077822185373186,
+          "ci95": [
+            0,
+            0.3850253148333145
+          ]
+        },
+        "woodwork_contacts": {
+          "mean": 0.6875,
+          "se": 0.2695482331605978,
+          "ci95": [
+            0.1591854630052284,
+            1.2158145369947717
+          ]
+        },
+        "shots_blocked": {
+          "mean": 5.0625,
+          "se": 0.4515597967047111,
+          "ci95": [
+            4.177442798458767,
+            5.947557201541233
+          ]
+        },
+        "pass_completion": 0.8182600066159444
+      },
+      "trial": 2,
+      "training_loss": 0.1669993283518811
+    },
+    {
+      "matches": 32,
+      "seed": 1000,
+      "parameters": {
+        "actions": {
+          "interval_seconds": 4,
+          "completion_probability": 0.95,
+          "shot_probability": 0.04,
+          "on_target_probability": 0.52,
+          "goal_given_on_target_probability": 0.2,
+          "foul_probability": 0.08,
+          "yellow_card_probability": 0.13,
+          "straight_red_probability": 0.001,
+          "penalty_area_foul_multiplier": 0.15
+        },
+        "crossing": {
+          "choice_probability": 0.25
+        },
+        "boundaries": {
+          "failed_pass_out_probability": 0.4
+        },
+        "shots": {
+          "block_probability": 0.5
+        }
+      },
+      "metrics": {
+        "goals": {
+          "mean": 2.46875,
+          "se": 0.2874539759795498,
+          "ci95": [
+            1.9053402070800824,
+            3.0321597929199173
+          ]
+        },
+        "shots": {
+          "mean": 27.28125,
+          "se": 0.9083332562641775,
+          "ci95": [
+            25.500916817722214,
+            29.061583182277786
+          ]
+        },
+        "shots_on_target": {
+          "mean": 9.34375,
+          "se": 0.42741103347042647,
+          "ci95": [
+            8.506024374397963,
+            10.181475625602037
+          ]
+        },
+        "passes_attempted": {
+          "mean": 940.90625,
+          "se": 3.7992357505564787,
+          "ci95": [
+            933.4597479289093,
+            948.3527520710907
+          ]
+        },
+        "passes_completed": {
+          "mean": 771.09375,
+          "se": 3.5382014792350773,
+          "ci95": [
+            764.1588751006992,
+            778.0286248993008
+          ]
+        },
+        "fouls_committed": {
+          "mean": 24.3125,
+          "se": 0.6947926994156532,
+          "ci95": [
+            22.95070630914532,
+            25.67429369085468
+          ]
+        },
+        "yellow_cards": {
+          "mean": 3.40625,
+          "se": 0.2834812924077377,
+          "ci95": [
+            2.850626666880834,
+            3.961873333119166
+          ]
+        },
+        "red_cards": {
+          "mean": 0.1875,
+          "se": 0.0701021719786843,
+          "ci95": [
+            0.05009974292177877,
+            0.32490025707822123
+          ]
+        },
+        "corners_taken": {
+          "mean": 8.8125,
+          "se": 0.40019526483955303,
+          "ci95": [
+            8.028117280914476,
+            9.596882719085524
+          ]
+        },
+        "penalties_taken": {
+          "mean": 0.4375,
+          "se": 0.10941099638076722,
+          "ci95": [
+            0.22305444709369626,
+            0.6519455529063037
+          ]
+        },
+        "penalties_scored": {
+          "mean": 0.25,
+          "se": 0.08980265101338744,
+          "ci95": [
+            0.07398680401376062,
+            0.4260131959862394
+          ]
+        },
+        "woodwork_contacts": {
+          "mean": 0.71875,
+          "se": 0.15705438112014658,
+          "ci95": [
+            0.4109234130045127,
+            1.0265765869954873
+          ]
+        },
+        "shots_blocked": {
+          "mean": 6.0625,
+          "se": 0.4162464278641648,
+          "ci95": [
+            5.246657001386237,
+            6.878342998613763
+          ]
+        },
+        "pass_completion": 0.8195224019396193
+      },
+      "trial": 3,
+      "training_loss": 0.16043390162905954
+    },
+    {
+      "matches": 32,
+      "seed": 1000,
+      "parameters": {
+        "actions": {
+          "interval_seconds": 4,
+          "completion_probability": 0.94,
+          "shot_probability": 0.038,
+          "on_target_probability": 0.52,
+          "goal_given_on_target_probability": 0.22,
+          "foul_probability": 0.08,
+          "yellow_card_probability": 0.13,
+          "straight_red_probability": 0.001,
+          "penalty_area_foul_multiplier": 0.08
+        },
+        "crossing": {
+          "choice_probability": 0.25
+        },
+        "boundaries": {
+          "failed_pass_out_probability": 0.45
+        },
+        "shots": {
+          "block_probability": 0.65
+        },
+        "set_pieces": {
+          "penalty_on_target_probability": 0.95,
+          "penalty_goal_given_on_target_probability": 0.93
+        }
+      },
+      "metrics": {
+        "goals": {
+          "mean": 2.46875,
+          "se": 0.24173588876986143,
+          "ci95": [
+            1.9949476580110717,
+            2.9425523419889283
+          ]
+        },
+        "shots": {
+          "mean": 28.09375,
+          "se": 0.9073616652318182,
+          "ci95": [
+            26.315321136145638,
+            29.872178863854362
+          ]
+        },
+        "shots_on_target": {
+          "mean": 8.59375,
+          "se": 0.4441814122812086,
+          "ci95": [
+            7.723154431928831,
+            9.464345568071169
+          ]
+        },
+        "passes_attempted": {
+          "mean": 940.46875,
+          "se": 3.127010442009346,
+          "ci95": [
+            934.3398095336617,
+            946.5976904663383
+          ]
+        },
+        "passes_completed": {
+          "mean": 763.375,
+          "se": 3.104286188793727,
+          "ci95": [
+            757.2905990699643,
+            769.4594009300357
+          ]
+        },
+        "fouls_committed": {
+          "mean": 25.21875,
+          "se": 0.7682384214405182,
+          "ci95": [
+            23.713002693976584,
+            26.724497306023416
+          ]
+        },
+        "yellow_cards": {
+          "mean": 3.34375,
+          "se": 0.3032398144713935,
+          "ci95": [
+            2.7493999636360686,
+            3.9381000363639314
+          ]
+        },
+        "red_cards": {
+          "mean": 0.25,
+          "se": 0.07777137710478188,
+          "ci95": [
+            0.09756810087462753,
+            0.40243189912537247
+          ]
+        },
+        "corners_taken": {
+          "mean": 10.34375,
+          "se": 0.5111841388289767,
+          "ci95": [
+            9.341829087895206,
+            11.345670912104794
+          ]
+        },
+        "penalties_taken": {
+          "mean": 0.0625,
+          "se": 0.04347552147751577,
+          "ci95": [
+            0,
+            0.14771202209593093
+          ]
+        },
+        "penalties_scored": {
+          "mean": 0.0625,
+          "se": 0.04347552147751577,
+          "ci95": [
+            0,
+            0.14771202209593093
+          ]
+        },
+        "woodwork_contacts": {
+          "mean": 0.40625,
+          "se": 0.10868880369378943,
+          "ci95": [
+            0.19321994476017273,
+            0.6192800552398272
+          ]
+        },
+        "shots_blocked": {
+          "mean": 8.25,
+          "se": 0.4751909633114914,
+          "ci95": [
+            7.318625711909477,
+            9.181374288090524
+          ]
+        },
+        "pass_completion": 0.8116962950656256
+      },
+      "trial": 4,
+      "training_loss": 0.16724238918571876
+    },
+    {
+      "matches": 64,
+      "seed": 1000,
+      "parameters": {
+        "actions": {
+          "interval_seconds": 4,
+          "completion_probability": 0.93,
+          "shot_probability": 0.0335,
+          "on_target_probability": 0.52,
+          "goal_given_on_target_probability": 0.23,
+          "foul_probability": 0.08,
+          "yellow_card_probability": 0.13,
+          "straight_red_probability": 0.001,
+          "penalty_area_foul_multiplier": 0.12
+        },
+        "crossing": {
+          "choice_probability": 0.25
+        },
+        "boundaries": {
+          "failed_pass_out_probability": 0.45
+        },
+        "shots": {
+          "block_probability": 0.6
+        },
+        "set_pieces": {
+          "penalty_on_target_probability": 0.95,
+          "penalty_goal_given_on_target_probability": 0.93
+        }
+      },
+      "metrics": {
+        "goals": {
+          "mean": 2.859375,
+          "se": 0.20151606377242817,
+          "ci95": [
+            2.464403515006041,
+            3.254346484993959
+          ]
+        },
+        "shots": {
+          "mean": 25.21875,
+          "se": 0.6233982451241017,
+          "ci95": [
+            23.99688943955676,
+            26.44061056044324
+          ]
+        },
+        "shots_on_target": {
+          "mean": 8.1875,
+          "se": 0.3180070317182031,
+          "ci95": [
+            7.5642062178323215,
+            8.810793782167679
+          ]
+        },
+        "passes_attempted": {
+          "mean": 943.546875,
+          "se": 2.284016417581916,
+          "ci95": [
+            939.0702028215394,
+            948.0235471784606
+          ]
+        },
+        "passes_completed": {
+          "mean": 750.203125,
+          "se": 2.284260726627392,
+          "ci95": [
+            745.7259739758103,
+            754.6802760241897
+          ]
+        },
+        "fouls_committed": {
+          "mean": 24.84375,
+          "se": 0.5705307461839982,
+          "ci95": [
+            23.725509737479364,
+            25.961990262520636
+          ]
+        },
+        "yellow_cards": {
+          "mean": 3.4375,
+          "se": 0.2258965822517372,
+          "ci95": [
+            2.9947426987865953,
+            3.8802573012134047
+          ]
+        },
+        "red_cards": {
+          "mean": 0.34375,
+          "se": 0.07119567686848623,
+          "ci95": [
+            0.204206473337767,
+            0.483293526662233
+          ]
+        },
+        "corners_taken": {
+          "mean": 12.65625,
+          "se": 0.4751872803315435,
+          "ci95": [
+            11.724882930550175,
+            13.587617069449825
+          ]
+        },
+        "penalties_taken": {
+          "mean": 0.40625,
+          "se": 0.07942860800644357,
+          "ci95": [
+            0.2505699283073706,
+            0.5619300716926294
+          ]
+        },
+        "penalties_scored": {
+          "mean": 0.390625,
+          "se": 0.07911084341375031,
+          "ci95": [
+            0.23556774690904939,
+            0.5456822530909506
+          ]
+        },
+        "woodwork_contacts": {
+          "mean": 0.640625,
+          "se": 0.09010352153636376,
+          "ci95": [
+            0.46402209778872705,
+            0.817227902211273
+          ]
+        },
+        "shots_blocked": {
+          "mean": 6.875,
+          "se": 0.3703414340548162,
+          "ci95": [
+            6.149130789252561,
+            7.600869210747439
+          ]
+        },
+        "pass_completion": 0.7950883468296156
+      },
+      "trial": 5,
+      "training_loss": 0.27861657751699226
+    },
+    {
+      "matches": 64,
+      "seed": 1000,
+      "parameters": {
+        "actions": {
+          "interval_seconds": 4,
+          "completion_probability": 0.93,
+          "shot_probability": 0.0335,
+          "on_target_probability": 0.52,
+          "goal_given_on_target_probability": 0.22,
+          "foul_probability": 0.09,
+          "yellow_card_probability": 0.14,
+          "straight_red_probability": 0.001,
+          "penalty_area_foul_multiplier": 0.08,
+          "booked_foul_multiplier": 0.35
+        },
+        "crossing": {
+          "choice_probability": 0.25
+        },
+        "boundaries": {
+          "failed_pass_out_probability": 0.38
+        },
+        "shots": {
+          "block_probability": 0.65
+        },
+        "set_pieces": {
+          "penalty_on_target_probability": 0.95,
+          "penalty_goal_given_on_target_probability": 0.93
+        }
+      },
+      "metrics": {
+        "goals": {
+          "mean": 2.5,
+          "se": 0.1795607515356947,
+          "ci95": [
+            2.1480609269900386,
+            2.8519390730099614
+          ]
+        },
+        "shots": {
+          "mean": 23.8125,
+          "se": 0.706361049704528,
+          "ci95": [
+            22.428032342579126,
+            25.196967657420874
+          ]
+        },
+        "shots_on_target": {
+          "mean": 7.5625,
+          "se": 0.2962019835844539,
+          "ci95": [
+            6.98194411217447,
+            8.143055887825529
+          ]
+        },
+        "passes_attempted": {
+          "mean": 939.703125,
+          "se": 2.5906845949260022,
+          "ci95": [
+            934.625383193945,
+            944.780866806055
+          ]
+        },
+        "passes_completed": {
+          "mean": 746.34375,
+          "se": 2.3983520663006446,
+          "ci95": [
+            741.6429799500507,
+            751.0445200499493
+          ]
+        },
+        "fouls_committed": {
+          "mean": 27.390625,
+          "se": 0.5916151836672509,
+          "ci95": [
+            26.23105924001219,
+            28.55019075998781
+          ]
+        },
+        "yellow_cards": {
+          "mean": 4.234375,
+          "se": 0.2144832608769938,
+          "ci95": [
+            3.8139878086810923,
+            4.654762191318908
+          ]
+        },
+        "red_cards": {
+          "mean": 0.1875,
+          "se": 0.0491747370293402,
+          "ci95": [
+            0.0911175154224932,
+            0.2838824845775068
+          ]
+        },
+        "corners_taken": {
+          "mean": 10.796875,
+          "se": 0.3997641216099655,
+          "ci95": [
+            10.013337321644467,
+            11.580412678355533
+          ]
+        },
+        "penalties_taken": {
+          "mean": 0.34375,
+          "se": 0.07459796344937072,
+          "ci95": [
+            0.19753799163923338,
+            0.48996200836076664
+          ]
+        },
+        "penalties_scored": {
+          "mean": 0.3125,
+          "se": 0.06998795247800504,
+          "ci95": [
+            0.17532361314311012,
+            0.4496763868568899
+          ]
+        },
+        "woodwork_contacts": {
+          "mean": 0.515625,
+          "se": 0.07384086916019701,
+          "ci95": [
+            0.37089689644601387,
+            0.6603531035539861
+          ]
+        },
+        "shots_blocked": {
+          "mean": 6.25,
+          "se": 0.32959209999778877,
+          "ci95": [
+            5.603999484004334,
+            6.896000515995666
+          ]
+        },
+        "pass_completion": 0.7942335511547862
+      },
+      "trial": 6,
+      "training_loss": 0.1358826922073467
+    },
+    {
+      "matches": 64,
+      "seed": 1000,
+      "parameters": {
+        "actions": {
+          "interval_seconds": 4,
+          "completion_probability": 0.93,
+          "shot_probability": 0.038,
+          "on_target_probability": 0.54,
+          "goal_given_on_target_probability": 0.22,
+          "foul_probability": 0.08,
+          "yellow_card_probability": 0.12,
+          "straight_red_probability": 0.001,
+          "penalty_area_foul_multiplier": 0.06,
+          "booked_foul_multiplier": 0.35
+        },
+        "crossing": {
+          "choice_probability": 0.25
+        },
+        "boundaries": {
+          "failed_pass_out_probability": 0.38
+        },
+        "shots": {
+          "block_probability": 0.7
+        },
+        "set_pieces": {
+          "penalty_on_target_probability": 0.95,
+          "penalty_goal_given_on_target_probability": 0.93
+        }
+      },
+      "metrics": {
+        "goals": {
+          "mean": 2.15625,
+          "se": 0.21503362370893725,
+          "ci95": [
+            1.7347840975304831,
+            2.577715902469517
+          ]
+        },
+        "shots": {
+          "mean": 25.40625,
+          "se": 0.5878729608134359,
+          "ci95": [
+            24.254018996805666,
+            26.558481003194334
+          ]
+        },
+        "shots_on_target": {
+          "mean": 7.9375,
+          "se": 0.3044600672332622,
+          "ci95": [
+            7.340758268222806,
+            8.534241731777193
+          ]
+        },
+        "passes_attempted": {
+          "mean": 936.359375,
+          "se": 2.44598058568453,
+          "ci95": [
+            931.5652530520583,
+            941.1534969479417
+          ]
+        },
+        "passes_completed": {
+          "mean": 742.8125,
+          "se": 2.251749209829606,
+          "ci95": [
+            738.399071548734,
+            747.225928451266
+          ]
+        },
+        "fouls_committed": {
+          "mean": 24.53125,
+          "se": 0.492990927465701,
+          "ci95": [
+            23.564987782167226,
+            25.497512217832774
+          ]
+        },
+        "yellow_cards": {
+          "mean": 2.90625,
+          "se": 0.20256141289017385,
+          "ci95": [
+            2.509229630735259,
+            3.303270369264741
+          ]
+        },
+        "red_cards": {
+          "mean": 0.078125,
+          "se": 0.033811213593755246,
+          "ci95": [
+            0.011855021356239726,
+            0.14439497864376027
+          ]
+        },
+        "corners_taken": {
+          "mean": 10.34375,
+          "se": 0.3694823907890261,
+          "ci95": [
+            9.61956451405351,
+            11.06793548594649
+          ]
+        },
+        "penalties_taken": {
+          "mean": 0.15625,
+          "se": 0.045745315919462494,
+          "ci95": [
+            0.06658918079785352,
+            0.24591081920214647
+          ]
+        },
+        "penalties_scored": {
+          "mean": 0.125,
+          "se": 0.041666666666666664,
+          "ci95": [
+            0.043333333333333335,
+            0.20666666666666667
+          ]
+        },
+        "woodwork_contacts": {
+          "mean": 0.375,
+          "se": 0.08183170883849715,
+          "ci95": [
+            0.2146098506765456,
+            0.5353901493234544
+          ]
+        },
+        "shots_blocked": {
+          "mean": 7.921875,
+          "se": 0.3523621307413093,
+          "ci95": [
+            7.231245223747034,
+            8.612504776252965
+          ]
+        },
+        "pass_completion": 0.7932985131910492
+      },
+      "trial": 7,
+      "training_loss": 0.12408203596302281
+    },
+    {
+      "matches": 64,
+      "seed": 1000,
+      "parameters": {
+        "actions": {
+          "interval_seconds": 4,
+          "completion_probability": 0.93,
+          "shot_probability": 0.038,
+          "on_target_probability": 0.56,
+          "goal_given_on_target_probability": 0.26,
+          "foul_probability": 0.08,
+          "yellow_card_probability": 0.132,
+          "straight_red_probability": 0.001,
+          "penalty_area_foul_multiplier": 0.075,
+          "booked_foul_multiplier": 0.35
+        },
+        "crossing": {
+          "choice_probability": 0.25
+        },
+        "boundaries": {
+          "failed_pass_out_probability": 0.38
+        },
+        "shots": {
+          "block_probability": 0.68
+        },
+        "set_pieces": {
+          "penalty_on_target_probability": 0.95,
+          "penalty_goal_given_on_target_probability": 0.93
+        }
+      },
+      "metrics": {
+        "goals": {
+          "mean": 3.234375,
+          "se": 0.24774998148014601,
+          "ci95": [
+            2.748785036298914,
+            3.719964963701086
+          ]
+        },
+        "shots": {
+          "mean": 25.375,
+          "se": 0.5873585611575601,
+          "ci95": [
+            24.223777220131183,
+            26.526222779868817
+          ]
+        },
+        "shots_on_target": {
+          "mean": 8.34375,
+          "se": 0.3274925405063474,
+          "ci95": [
+            7.701864620607559,
+            8.985635379392441
+          ]
+        },
+        "passes_attempted": {
+          "mean": 938.484375,
+          "se": 2.625329928954282,
+          "ci95": [
+            933.3387283392497,
+            943.6300216607503
+          ]
+        },
+        "passes_completed": {
+          "mean": 744.328125,
+          "se": 2.6105568918271578,
+          "ci95": [
+            739.2114334920187,
+            749.4448165079813
+          ]
+        },
+        "fouls_committed": {
+          "mean": 24.265625,
+          "se": 0.5666151007262618,
+          "ci95": [
+            23.155059402576526,
+            25.376190597423474
+          ]
+        },
+        "yellow_cards": {
+          "mean": 3.15625,
+          "se": 0.22627367674061047,
+          "ci95": [
+            2.7127535935884035,
+            3.5997464064115965
+          ]
+        },
+        "red_cards": {
+          "mean": 0.140625,
+          "se": 0.043797805514170944,
+          "ci95": [
+            0.05478130119222495,
+            0.22646869880777504
+          ]
+        },
+        "corners_taken": {
+          "mean": 10.3125,
+          "se": 0.34637794180840753,
+          "ci95": [
+            9.633599234055522,
+            10.991400765944478
+          ]
+        },
+        "penalties_taken": {
+          "mean": 0.265625,
+          "se": 0.07127727652491728,
+          "ci95": [
+            0.12592153801116213,
+            0.4053284619888379
+          ]
+        },
+        "penalties_scored": {
+          "mean": 0.25,
+          "se": 0.07042952122737638,
+          "ci95": [
+            0.1119581383943423,
+            0.3880418616056577
+          ]
+        },
+        "woodwork_contacts": {
+          "mean": 0.359375,
+          "se": 0.08142818526259031,
+          "ci95": [
+            0.19977575688532298,
+            0.518974243114677
+          ]
+        },
+        "shots_blocked": {
+          "mean": 7.34375,
+          "se": 0.33275153840294086,
+          "ci95": [
+            6.691556984730236,
+            7.995943015269764
+          ]
+        },
+        "pass_completion": 0.7931172269117427
+      },
+      "trial": 8,
+      "training_loss": 0.08140555101007203
+    }
+  ]
+}

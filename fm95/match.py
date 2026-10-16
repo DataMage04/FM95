@@ -964,10 +964,18 @@ class Match:
         return measure_pressure(self.active_players(defending_id), self._player_locations,
                                 self._possession.location, self.pitch, self.defense_config)
 
+    def _foul_probability(self, possession, defending, defender_id=None):
+        probability = self.action_config.foul_probability
+        if self.pitch.in_penalty_area(possession.location, self.attacking_direction(defending.id)):
+            probability *= self.action_config.penalty_area_foul_multiplier
+        if defender_id is not None and self.discipline(defending.id, defender_id).yellow_cards:
+            probability *= self.action_config.booked_foul_multiplier
+        return probability
+
     def _award_foul(self, possession, attacking, defending, defender_id, reason):
         self.events.append(MatchEvent(self.elapsed_seconds, "foul", defending.id, defender_id,
             possession.zone, fouled_player_id=possession.player_id,
-            foul_probability=self.action_config.foul_probability,
+            foul_probability=self._foul_probability(possession, defending, defender_id),
             location=possession.location, reason=reason))
         card = foul_card(self._rng, self.action_config)
         if card is not None:
@@ -1014,8 +1022,8 @@ class Match:
         carrier = next(p for p in attacking.lineup if p.id == possession.player_id)
         probability = press_win_chance(defender.attributes.tackling, carrier.attributes.dribbling,
                                        config.press_win_probability, self.action_config.attribute_strength)
-        fouled = (self.action_config.foul_probability > 0
-                  and self._rng.random() < self.action_config.foul_probability)
+        foul_probability = self._foul_probability(possession, defending, defender.id)
+        fouled = (foul_probability > 0 and self._rng.random() < foul_probability)
         won = False if fouled else self._rng.random() < probability
         knocked_loose = won and self._tackle_knocks_loose()
         self.events.append(MatchEvent(self.elapsed_seconds,
@@ -1932,9 +1940,10 @@ class Match:
         if action == "dribble":
             result = resolve_dribble(possession, attacking, defending,
                                      self.attacking_direction(attacking.id), self._rng,
-                                     self.action_config,
+                                     replace(self.action_config, foul_probability=self._foul_probability(possession, defending)),
                                      locations=self._player_locations if self.defense_config.enabled else None,
-                                     pitch=self.pitch)
+                                     pitch=self.pitch, booked_ids={p.id for p in defending.lineup
+                                         if self.discipline(defending.id, p.id).yellow_cards})
             if result.fouled:
                 self._award_foul(possession, attacking, defending, result.defender_id, "take_on")
                 return
