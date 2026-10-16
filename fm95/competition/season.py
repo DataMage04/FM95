@@ -140,6 +140,7 @@ class Season:
 
     def play_fixture(self, fixture_id: str, *,
                      tactics: Mapping[str, TeamTactics] | None = None,
+                     manager_selection: SquadSelection | None = None,
                      match_options: Mapping | None = None,
                      on_half_time: Callable[[Match], None] | None = None) -> FixtureResult:
         """Run and record one fixture; a completed result cannot be overwritten."""
@@ -192,6 +193,10 @@ class Season:
             raise ValueError(f"Match options cannot override fixture inputs: {sorted(reserved)}")
         home_club = self._team_by_id[fixture.home_team_id]
         away_club = self._team_by_id[fixture.away_team_id]
+        if manager_selection is not None and self.manager_assignment is None:
+            raise ValueError("A manager must be assigned before submitting a manager lineup.")
+        if manager_selection is not None and not isinstance(manager_selection, SquadSelection):
+            raise ValueError("Manager selection must be a SquadSelection instance.")
         home_selection = (self.manager_assignment.selection if self.manager_assignment
                           and self.manager_assignment.team_id == home_club.id
                           else SquadSelection(home_club.default_lineup_ids) if self.manager_assignment is None
@@ -200,6 +205,11 @@ class Season:
                           and self.manager_assignment.team_id == away_club.id
                           else SquadSelection(away_club.default_lineup_ids) if self.manager_assignment is None
                           else cpu_selection(away_club, fixture.seed))
+        if manager_selection is not None:
+            if self.manager_assignment.team_id == home_club.id:
+                home_selection = manager_selection
+            elif self.manager_assignment.team_id == away_club.id:
+                away_selection = manager_selection
         home = home_club.to_team(home_selection)
         away = away_club.to_team(away_selection)
         match = Match(home, away, seed=fixture.seed,
@@ -230,6 +240,7 @@ class Season:
 
     def play_matchday(self, matchday: int, *,
                       tactics: Mapping[str, TeamTactics] | None = None,
+                      manager_selection: SquadSelection | None = None,
                       match_options: Mapping | None = None,
                       on_half_time: Callable[[Match], None] | None = None) -> tuple[FixtureResult, ...]:
         """Play every not-yet-recorded fixture on a matchday, in schedule order."""
@@ -240,6 +251,7 @@ class Season:
                for fixture in self.fixtures):
             raise ValueError("Earlier matchdays must be complete before this matchday can start.")
         return tuple(self.play_fixture(fixture.id, tactics=tactics,
+                                       manager_selection=manager_selection,
                                        match_options=match_options,
                                        on_half_time=on_half_time)
                      for fixture in fixtures if fixture.id not in self._results)
