@@ -1,0 +1,69 @@
+{
+  "passed": true,
+  "purpose": "versioned save, restart, and deterministic season resumption",
+  "save_version": 1,
+  "seed": 95,
+  "clubs": 4,
+  "fixtures": 12,
+  "completed_before_save": 2,
+  "completed_after_resume": 10,
+  "matchdays": 6,
+  "checks": {
+    "schedule_and_seeds_preserved": true,
+    "completed_results_preserved_on_load": true,
+    "settings_restored": true,
+    "final_results_match": true,
+    "final_standings_match": true,
+    "all_fixtures_completed": true
+  },
+  "standings": [
+    {
+      "team_id": "club-3",
+      "team_name": "Club 3",
+      "played": 6,
+      "won": 2,
+      "drawn": 2,
+      "lost": 2,
+      "goals_for": 3,
+      "goals_against": 2,
+      "goal_difference": 1,
+      "points": 8
+    },
+    {
+      "team_id": "club-2",
+      "team_name": "Club 2",
+      "played": 6,
+      "won": 1,
+      "drawn": 5,
+      "lost": 0,
+      "goals_for": 1,
+      "goals_against": 0,
+      "goal_difference": 1,
+      "points": 8
+    },
+    {
+      "team_id": "club-1",
+      "team_name": "Club 1",
+      "played": 6,
+      "won": 1,
+      "drawn": 4,
+      "lost": 1,
+      "goals_for": 1,
+      "goals_against": 1,
+      "goal_difference": 0,
+      "points": 7
+    },
+    {
+      "team_id": "club-4",
+      "team_name": "Club 4",
+      "played": 6,
+      "won": 0,
+      "drawn": 5,
+      "lost": 1,
+      "goals_for": 0,
+      "goals_against": 2,
+      "goal_difference": -2,
+      "points": 5
+    }
+  ]
+}

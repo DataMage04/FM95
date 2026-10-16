@@ -1,6 +1,6 @@
 """Match lifecycle and application of resolved football actions."""
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from enum import Enum
 from random import Random
 
@@ -8,6 +8,8 @@ from fm95.match.mechanics.actions import ActionConfig, choose_action, resolve_pa
 from fm95.match.spatial.pitch import CENTRE, Direction, Location, Pitch, Zone
 from fm95.match.statistics import TeamStats, team_statistics
 from fm95.players.attributes import Attributes
+from fm95.players.model import Player
+from fm95.teams.model import Team
 from fm95.players.decisions import (DecisionConfig, DecisionTendencies, apply_decisions,
                             decision_probability)
 from fm95.match.mechanics.actions import press_win_chance
@@ -43,52 +45,6 @@ from fm95.match.mechanics.through_balls import ThroughBallConfig, forward_runs, 
 from fm95.match.mechanics.goalkeeping import KeeperCrossConfig, handling_chance, keeper_can_intervene, punch_endpoint
 from fm95.players.attributes import ability_multiplier
 from fm95.match.spatial.positions import Position, operating_zone, formation_reference_locations
-
-
-@dataclass(frozen=True)
-class Player:
-    id: str
-    name: str
-    is_goalkeeper: bool = False
-    attributes: Attributes = field(default_factory=Attributes)
-    position: Position | None = None
-    decisions: DecisionTendencies = field(default_factory=DecisionTendencies)
-
-    def __post_init__(self):
-        if not isinstance(self.attributes, Attributes):
-            raise ValueError("Player attributes must be an Attributes instance.")
-        if not isinstance(self.decisions, DecisionTendencies):
-            raise ValueError("Player decisions must be a DecisionTendencies instance.")
-        if self.position is None:
-            object.__setattr__(self, "position", Position.GK if self.is_goalkeeper else Position.CM)
-        if not isinstance(self.position, Position):
-            raise ValueError("Player position must be a Position enum value.")
-        if (self.position == Position.GK) != self.is_goalkeeper:
-            raise ValueError("Goalkeeper designation and position must agree.")
-
-
-@dataclass(frozen=True)
-class Team:
-    id: str
-    name: str
-    lineup: tuple[Player, ...]
-    bench: tuple[Player, ...] = ()
-
-    @property
-    def squad(self) -> tuple[Player, ...]:
-        return self.lineup + self.bench
-
-    def __post_init__(self):
-        object.__setattr__(self, "lineup", tuple(self.lineup))
-        object.__setattr__(self, "bench", tuple(self.bench))
-        if any(not isinstance(player, Player) for player in self.squad):
-            raise ValueError("A match squad must contain Player instances.")
-        if len(self.lineup) != 11:
-            raise ValueError("A starting lineup must contain exactly 11 players.")
-        if len({p.id for p in self.squad}) != len(self.squad):
-            raise ValueError("Players in a match squad must have unique IDs.")
-        if sum(p.is_goalkeeper for p in self.lineup) != 1:
-            raise ValueError("A starting lineup must contain one goalkeeper.")
 
 
 class Phase(str, Enum):

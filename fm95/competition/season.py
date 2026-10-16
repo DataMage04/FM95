@@ -7,7 +7,8 @@ from random import Random
 from typing import Callable, Mapping
 
 from fm95.match.simulation import run_match
-from fm95.match import Match, Phase, Team
+from fm95.match.engine import Match, Phase
+from fm95.teams.model import Team
 from fm95.match.statistics import TeamStats
 from fm95.match.tactics import TeamTactics
 
@@ -85,6 +86,7 @@ class Season:
         self.fixtures = self._make_fixtures()
         self._fixture_by_id = {fixture.id: fixture for fixture in self.fixtures}
         self._results: dict[str, FixtureResult] = {}
+        self._run_settings: dict | None = None
         self.validate()
 
     @property
@@ -122,6 +124,7 @@ class Season:
         if any(other.matchday < fixture.matchday and other.id not in self._results
                for other in self.fixtures):
             raise ValueError("Earlier matchdays must be complete before this fixture can start.")
+        tactics_were_supplied = tactics is not None
         if tactics is None:
             tactics = {}
         if not isinstance(tactics, Mapping):
@@ -134,15 +137,26 @@ class Season:
                 raise ValueError(f"Tactics for {team_id} must be a TeamTactics instance.")
         if match_options is not None and not isinstance(match_options, Mapping):
             raise ValueError("Match options must be a mapping of Match arguments.")
-        options = dict(match_options or {})
+        requested_tactics = dict(tactics)
+        requested_options = dict(match_options or {})
+        if self._run_settings is None:
+            effective_tactics = requested_tactics
+            options = requested_options
+        else:
+            effective_tactics = self._run_settings["tactics"]
+            options = self._run_settings["match_options"]
+            if tactics_were_supplied and requested_tactics != effective_tactics:
+                raise ValueError("Season tactics are fixed after the first fixture; omit them to resume saved settings.")
+            if match_options is not None and requested_options != options:
+                raise ValueError("Season match settings are fixed after the first fixture; omit them to resume saved settings.")
         reserved = {"home", "away", "seed", "home_tactics", "away_tactics"} & options.keys()
         if reserved:
             raise ValueError(f"Match options cannot override fixture inputs: {sorted(reserved)}")
         home = self._team_by_id[fixture.home_team_id]
         away = self._team_by_id[fixture.away_team_id]
         match = Match(home, away, seed=fixture.seed,
-                      home_tactics=tactics.get(home.id),
-                      away_tactics=tactics.get(away.id), **options)
+                      home_tactics=effective_tactics.get(home.id),
+                      away_tactics=effective_tactics.get(away.id), **options)
         run_match(match, on_half_time=on_half_time)
         if match.phase != Phase.FULL_TIME:
             raise RuntimeError(f"Fixture {fixture_id} was abandoned and has no result.")
@@ -155,6 +169,11 @@ class Season:
             elapsed_seconds=match.elapsed_seconds,
         )
         self._results[fixture.id] = result
+        if self._run_settings is None:
+            self._run_settings = {
+                "match_options": options,
+                "tactics": effective_tactics,
+            }
         return result
 
     def play_matchday(self, matchday: int, *,
@@ -219,8 +238,17 @@ class Season:
             raise ValueError("Fixture IDs must be unique.")
         if len({fixture.seed for fixture in self.fixtures}) != len(self.fixtures):
             raise ValueError("Fixture seeds must be unique within a season.")
+        if self.fixtures != self._make_fixtures():
+            raise ValueError("Fixtures or per-fixture seeds do not match this season's schedule seed.")
         if len(self._results) > len(self.fixtures):
             raise ValueError("Season has more results than fixtures.")
+        if self._results and self._run_settings is None:
+            raise ValueError("Completed fixtures must retain the settings used to simulate them.")
+        if self._run_settings is not None:
+            if set(self._run_settings) != {"match_options", "tactics"}:
+                raise ValueError("Season run settings are malformed.")
+            if set(self._run_settings["tactics"]) - self._team_by_id.keys():
+                raise ValueError("Season tactics reference an unknown team.")
         pair_venues: dict[tuple[str, str], dict[tuple[str, str], int]] = {}
         teams_per_day: dict[int, set[str]] = {}
         for fixture in self.fixtures:
@@ -249,13 +277,36 @@ class Season:
             fixture = self._fixture_by_id.get(fixture_id)
             if fixture is None or result.fixture_id != fixture_id:
                 raise ValueError("A result references an unknown or mismatched fixture.")
-            if min(result.home_goals, result.away_goals, result.elapsed_seconds) < 0:
+            if any(other.matchday < fixture.matchday and other.id not in self._results
+                   for other in self.fixtures):
+                raise ValueError("A completed fixture skips an earlier matchday.")
+            if any(type(value) is not int or value < 0 for value in
+                   (result.home_goals, result.away_goals, result.elapsed_seconds)):
                 raise ValueError(f"Result for {fixture_id} contains a negative value.")
-            if (result.home_stats.team_id != fixture.home_team_id
+            if (not isinstance(result.home_stats, TeamStats)
+                    or not isinstance(result.away_stats, TeamStats)
+                    or result.home_stats.team_id != fixture.home_team_id
                     or result.away_stats.team_id != fixture.away_team_id
                     or result.home_stats.goals != result.home_goals
                     or result.away_stats.goals != result.away_goals):
                 raise ValueError(f"Result for {fixture_id} does not reconcile with match statistics.")
+
+    @classmethod
+    def _restore(cls, *, name: str, teams: tuple[Team, ...], seed: int,
+                 points_for_win: int, points_for_draw: int, points_for_loss: int,
+                 fixtures: tuple[Fixture, ...], results: tuple[FixtureResult, ...],
+                 run_settings: dict | None) -> "Season":
+        """Rebuild validated persisted state without regenerating or losing results."""
+        season = cls(name, teams, seed=seed, points_for_win=points_for_win,
+                     points_for_draw=points_for_draw, points_for_loss=points_for_loss)
+        if tuple(fixtures) != season.fixtures:
+            raise ValueError("Saved fixtures or seeds do not match the season schedule.")
+        season._results = {result.fixture_id: result for result in results}
+        if len(season._results) != len(results):
+            raise ValueError("Save contains duplicate fixture results.")
+        season._run_settings = run_settings
+        season.validate()
+        return season
 
     def _make_fixtures(self) -> tuple[Fixture, ...]:
         rng = Random(self.seed)

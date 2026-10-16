@@ -1,6 +1,7 @@
 """Synthetic equal-ability teams for examples, not a real player database."""
 
-from fm95.match import Player, Team
+from fm95.players.model import Player
+from fm95.teams.model import Team
 from fm95.players.attributes import Attributes
 from fm95.match.spatial.positions import Position
 

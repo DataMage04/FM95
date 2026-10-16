@@ -1,9 +1,9 @@
 # FM95
 
-A Python football manager built from the match engine outward. **Milestone 1 is
-still in progress:** the engine now runs reproducible spatial match prototypes,
-with a first real-data aggregate calibration profile. Attribute effects and several
-other systems still need empirical calibration.
+A Python football manager built from the match engine outward. The current
+foundation includes a reproducible spatial match engine, synthetic player and
+club models, round-robin seasons, and versioned save/resume. Attribute effects
+and several other systems still need empirical calibration.
 
 Python 3.10 or newer; no external runtime dependencies.
 
@@ -19,7 +19,7 @@ python -m fm95.analysis.validation --matches 8 --seed 95 --json
 The demo uses synthetic equal-ability teams, different tactical instructions,
 automatic substitutions, and opt-in injury generation. It prints sample actions,
 shots, restarts, substitutions, and statistics. The regression suite has
-**341 tests**.
+**346 tests**.
 
 ## Code layout
 
@@ -33,8 +33,9 @@ fm95/
     spatial/       # pitch geometry and player positions
     mechanics/     # actions, movement, defending, shooting, rules, and restarts
     systems/       # fatigue, injuries, substitutions, treatment, and timekeeping
-  players/         # player data, decisions, squad generation, demo squads
-  competition/    # seasons, fixtures, results, and standings
+  players/         # identities, attributes, decisions, squad generation
+  teams/           # clubs, match lineups, and benches
+  competition/     # seasons, fixtures, results, standings, persistence
   analysis/       # calibration and integrated validation
 ```
 
@@ -54,9 +55,10 @@ engine, player differentiation, optional match systems, season loop, and checks:
 | Player differences | `python -m fm95.match.simulation --generated-squads --home-strength .7 --away-strength .3 --decision-strength .7 --matches 20 --seed 95 --json` | Synthetic player attributes, tendencies, and stronger/weaker squads |
 | Tactical styles | `python -m fm95.match.simulation --matches 2 --home-style pressing --away-style direct --json` | Different team instructions in the same match setup |
 | Optional match systems | `python -m fm95.match.simulation --matches 2 --seed 95 --added-time --woodwork --temporary-injuries --off-ball-offside --auto-substitutions --json` | Added time, woodwork, treatment, offside screening, and automatic substitutions |
+| Season save/resume | `python -m fm95.competition.persistence_validation --clubs 4 --seed 95 --json` | Save after a matchday, reload, resume with stored settings, compare to uninterrupted season |
 | Full season | `python -m fm95.competition.validation --clubs 4 --seed 95 --json` | Fixture generation, ordered matchdays, results, and final standings |
 | Integrated match validation | `python -m fm95.analysis.validation --matches 8 --seed 95 --generated-squads --decision-strength .8 --json` | State/statistic checks and exact seeded replays across configured scenarios |
-| All automated tests | `python -m unittest discover -s tests -v` | The complete regression suite (341 tests) |
+| All automated tests | `python -m unittest discover -s tests -v` | The complete regression suite (346 tests) |
 | Available match switches | `python -m fm95.match.simulation --help` | Options for isolating or combining match features |
 
 For the opt-in aggregate research profile, run
@@ -495,15 +497,14 @@ and response strength are not empirically identified by these aggregate targets.
 Bounded monotonic attribute responses have been checked, but that does not validate
 a final player-rating scale or realistic skill effects.
 
-## Milestone 3: in-memory competitions and seasons
+## Milestone 3: competitions and seasons
 
 Milestone 3 adds an in-memory home-and-away league season. It generates fixtures
 and matchdays for even or odd numbers of clubs, assigns a reproducible seed to
 each fixture, runs matches using the existing match engine, records full-time
 scores and statistics, and derives standings by points, goal difference, goals
 scored and team ID. Matchdays progress in order; a partially played day can be
-resumed, while completed results cannot be overwritten. The competition layer
-does not add persistence, transfers or a user interface.
+resumed, while completed results cannot be overwritten.
 
 ```python
 from fm95.players.demo import demo_team
@@ -516,11 +517,31 @@ for matchday in season.matchdays:
 print(season.standings())
 ```
 
-See [the Milestone 3 guide](docs/milestone3.md) for the API behavior and
-limitations. Persistence, transfers, broader club management and a GUI remain
-future work; the competition layer is in memory and reuses the engine's seeded
-pseudo-random behavior for repeatable fixture simulation.
+See [the Milestone 3 guide](docs/milestone3.md) for season and fixture behavior.
 
 Run the full-season acceptance check with `python -m fm95.competition.validation
 --clubs 4 --seed 95 --json`; its recorded output is in
 [docs/milestone3-validation.json](docs/milestone3-validation.json).
+
+## Milestone 4: persistent seasons
+
+Season files use a versioned JSON format and atomic replacement. They store clubs
+and complete squads, competition rules, the full fixture schedule and seeds,
+completed scores and statistics, plus the match options and team tactics used for
+the season. Loading validates the format, fixture schedule, references and result
+statistics, then rebuilds standings from the saved results. Save between fixtures;
+mid-match state, transfers, finances and UI are outside this milestone.
+
+```python
+from fm95.competition.persistence import load_season, save_season
+
+save_season(season, "saves/2026-27.json")
+season = load_season("saves/2026-27.json")
+for matchday in season.matchdays:
+    season.play_matchday(matchday)  # Completed fixtures are skipped.
+```
+
+See [the Milestone 4 guide](docs/milestone4.md) and run
+`python -m fm95.competition.persistence_validation --clubs 4 --seed 95 --json`
+to check save/restart/resume against an uninterrupted seeded season. Its
+acceptance report is [docs/milestone4-validation.json](docs/milestone4-validation.json).
